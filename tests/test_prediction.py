@@ -132,6 +132,11 @@ def test_artifact_failures_are_explicit(bundle, tmp_path):
     with pytest.raises(ModelArtifactError, match="feature contract"):
         load_model(wrong_contract)
 
+    stale = tmp_path / "stale.joblib"
+    joblib.dump({**bundle, "versions": {"scikit-learn": "0.0", "xgboost": "0.0"}}, stale)
+    with pytest.raises(ModelArtifactError, match="was built with"):
+        load_model(stale)
+
 
 def test_demo_inputs_are_valid_and_distinct():
     assert len({replace(p) for p in DEMO_INPUTS.values()}) == len(DEMO_INPUTS)

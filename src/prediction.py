@@ -11,6 +11,8 @@ from pathlib import Path
 
 import joblib
 import pandas as pd
+import sklearn
+import xgboost
 
 from src.data_loader import ROOT
 from src.preprocessing import CATEGORIES, FEATURE_LABELS, FEATURES, MODEL_FEATURES, PLAUSIBLE, bmi
@@ -120,6 +122,10 @@ def load_model(path: Path = FINAL_MODEL_PATH) -> dict:
             or bundle.get("categories") != CATEGORIES
             or list(getattr(pipeline, "feature_names_in_", [])) != FEATURES):
         raise ModelArtifactError(f"Model artifact at {path} does not match the current feature contract. {hint}")
+    installed = {"scikit-learn": sklearn.__version__, "xgboost": xgboost.__version__}
+    if bundle.get("versions") != installed:  # pickles are only reliable on the library versions that wrote them
+        raise ModelArtifactError(f"Model artifact at {path} was built with {bundle.get('versions')}, but "
+                                 f"{installed} is installed. {hint}")
     return bundle
 
 

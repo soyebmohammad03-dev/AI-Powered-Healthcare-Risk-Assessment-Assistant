@@ -16,7 +16,7 @@ import json
 import numpy as np
 import pandas as pd
 
-from src.data_loader import ROOT, SEED, load_dataset, split
+from src.data_loader import ROOT, SEED, load_dataset, provenance, split
 from src.evaluate_models import calibration_stats, full_metrics
 from src.preprocessing import add_bmi, plausible_mask
 from src.reliability import load_candidates
@@ -61,7 +61,7 @@ def offset(X: pd.DataFrame, change: dict, how: str) -> pd.DataFrame:
 def main() -> dict:
     _, X_test, _, y_test = split(load_dataset())
     candidates = load_candidates()
-    report = {"synthetic": True, "kind": "Controlled distribution-shift experiment",
+    report = {"provenance": provenance(),"synthetic": True, "kind": "Controlled distribution-shift experiment",
               "note": "Synthetic perturbations of the held-out test set. Not a real-world or external validation.",
               "rows": len(X_test), "seed": SEED, "baseline": score(candidates, X_test, y_test),
               "population_mix": [], "measurement_offset": []}

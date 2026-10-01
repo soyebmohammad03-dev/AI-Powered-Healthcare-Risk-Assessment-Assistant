@@ -1,6 +1,7 @@
 """Download, clean and load the Cardiovascular Disease dataset (Kaggle: sulianova)."""
 import hashlib
 import io
+import platform
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -20,17 +21,32 @@ RAW_COLUMNS = ["id", "age", "gender", "height", "weight", "ap_hi", "ap_lo",
                "cholesterol", "gluc", "smoke", "alco", "active", "cardio"]
 TARGET = "cardio"  # 1 = cardiovascular disease present, 0 = absent
 SEED = 42
+RAW_ROWS, CLEAN_ROWS = 70_000, 68_573  # pinned by SHA256; documented here for readers
 
 
 def download(path: Path = DATA_PATH) -> Path:
     if not path.exists():
         path.parent.mkdir(parents=True, exist_ok=True)
-        with urllib.request.urlopen(URL) as resp, zipfile.ZipFile(io.BytesIO(resp.read())) as zf:
-            path.write_bytes(zf.read("cardio_train.csv"))
+        try:
+            with urllib.request.urlopen(URL, timeout=60) as resp, zipfile.ZipFile(io.BytesIO(resp.read())) as zf:
+                path.write_bytes(zf.read("cardio_train.csv"))
+        except Exception as exc:
+            raise RuntimeError(f"Could not download the dataset ({exc}). Download it manually from {SOURCE}, "
+                               f"unzip it and place cardio_train.csv at {path}.") from exc
     digest = hashlib.sha256(path.read_bytes()).hexdigest()
     if digest != SHA256:
-        raise ValueError(f"Checksum mismatch for {path}: {digest}")
+        raise ValueError(f"Checksum mismatch for {path}: {digest}. Expected the original cardio_train.csv "
+                         f"from {SOURCE} (sha256 {SHA256}). Delete the file and rerun to download it again.")
     return path
+
+
+def provenance() -> dict:
+    """Recorded in every generated artifact: what produced it."""
+    import datetime
+    from importlib.metadata import version
+    return {"generated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
+            "python": platform.python_version(), "dataset_sha256": SHA256, "seed": SEED,
+            "versions": {p: version(p) for p in ("numpy", "pandas", "scikit-learn", "xgboost", "shap")}}
 
 
 def load_raw(path: Path = DATA_PATH) -> pd.DataFrame:

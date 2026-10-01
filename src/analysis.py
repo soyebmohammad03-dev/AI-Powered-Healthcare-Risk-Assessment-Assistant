@@ -16,7 +16,7 @@ import shap
 from sklearn.inspection import permutation_importance
 from sklearn.metrics import confusion_matrix, precision_recall_curve, roc_curve
 
-from src.data_loader import ROOT, SEED, TARGET, clean_with_exclusions, load_raw, split
+from src.data_loader import ROOT, SEED, TARGET, clean_with_exclusions, load_raw, provenance, split
 from src.evaluate_models import (bootstrap_ci, calibration_data, decision_curve, full_metrics, subgroup_metrics,
                                  threshold_metrics)
 from src.explainability import ModelExplainer, _column_owners
@@ -157,7 +157,7 @@ def main() -> dict:
     gender = X_test["gender"].map(CATEGORY_LABELS["gender"])
     permutation = permutation_importance(final, X_test, y_test, scoring="roc_auc", n_repeats=10,
                                          random_state=SEED)
-    report = {
+    report = {"provenance": provenance(),
         "final_model": bundle["model_name"], "calibration": bundle["calibration"],
         "test_rows": len(X_test), "seed": SEED,
         "data_quality": data_quality(raw, df, removed, excluded),

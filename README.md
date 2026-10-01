@@ -120,65 +120,70 @@ app.py                  Streamlit entry point (top navigation)
 ui/core.py              design tokens, cached resources, shared components
 ui/{assess,explain,explore,model,methodology}.py   the five pages
 docs/                   methodology.md, evaluation.md, model_card.md
-tests/                  145 tests (data, models, evaluation, selection, reliability, prediction, SHAP, what-if, guidance, UI)
+scripts/setup.sh        fresh-clone setup and full regeneration
+tests/                  148 tests (data, models, evaluation, selection, reliability, prediction, SHAP, what-if, guidance, UI)
 ```
 
 The rule-based guidance engine (`src/recommendations.py`) uses fixed, transparent rules on the user's inputs and the probability band, with no LLM. It never states a condition or names a treatment. A lower estimate is described as "does not rule out any health condition".
 
 ## Setup
 
-Requires **Python 3.12**.
+Tested on macOS (Apple Silicon) with **Python 3.12**. From a fresh clone:
 
 ```bash
-python3.12 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+./scripts/setup.sh
 ```
 
-On macOS, XGBoost needs OpenMP:
+The script is safe to rerun and only creates what is missing:
+1. checks for Python 3.12 (`PYTHON=/path/to/python3.12 ./scripts/setup.sh` to choose one);
+2. creates `.venv` and installs the pinned dependencies (`requirements.txt` for runtime, `requirements-dev.txt` adds pytest);
+3. checks that XGBoost can load OpenMP (on macOS: `brew install libomp`, the one system dependency);
+4. downloads and validates the dataset;
+5. trains the models if `models/` is missing them or they were saved by other library versions, then builds the novelty detector;
+6. loads the saved model and scores the three synthetic demo inputs.
 
-```bash
-brew install libomp
-```
+The first run takes about 10 minutes on an Apple Silicon laptop (measured: 9 min 16 s for a full `--regenerate` including the dependency install), mostly the 9-variant repeated-CV comparison.
 
-Generate the models and the analysis artifacts. The first run also downloads the dataset. The four steps take about 5 minutes, 1 minute, 1.5 minutes and a few seconds.
+| Task | Command |
+|---|---|
+| Set up | `./scripts/setup.sh` |
+| Run the tests | `.venv/bin/python -m pytest -q` |
+| Run the app | `.venv/bin/streamlit run app.py` |
+| Retrain the models only | `.venv/bin/python -m src.train_models` |
+| Regenerate every model and artifact | `./scripts/setup.sh --regenerate` |
+| Check the saved model | `.venv/bin/python -m src.prediction` |
 
-The seed is fixed, so:
-- results reproduce exactly for Logistic Regression;
-- Random Forest and XGBoost reproduce to floating-point precision (about 1e-16, from multithreaded tree training);
-- every selection decision is identical.
+Other command-line checks: `python -m src.explainability` and `python -m src.recommendations`.
 
-```bash
-python -m src.train_models
-```
+### Dataset setup
 
-```bash
-python -m src.analysis
-```
+The dataset is not committed. `src/data_loader.py` downloads it from Kaggle's public API on first use, with **no account or credentials**: `https://www.kaggle.com/api/v1/datasets/download/sulianova/cardiovascular-disease-dataset`. It then validates the file:
+- **Checksum:** `cardio_train.csv` must have SHA-256 `21a705d23381b0dfd6a6416da701b490744f1fc3b47e9ff3db3968c420ffa10c`, which pins all 70,000 rows exactly.
+- **Format:** semicolon-separated, columns `id;age;gender;height;weight;ap_hi;ap_lo;cholesterol;gluc;smoke;alco;active;cardio` in that order.
+- **Cleaning:** the cleaned row count must be 68,573, checked by `setup.sh`.
 
-```bash
-python -m src.reliability
-```
+**If the download fails** (offline, or Kaggle changes its API), download the dataset manually from the [Kaggle page](https://www.kaggle.com/datasets/sulianova/cardiovascular-disease-dataset), unzip it, and place `cardio_train.csv` at `data/cardio_train.csv`. The checksum is still verified.
 
-```bash
-python -m src.shift_analysis
-```
+**Raw schema:**
+- `age` is in days and is converted to years.
+- `gender`: 1 = female, 2 = male.
+- `height` is in cm and `weight` in kg.
+- `ap_hi` and `ap_lo` are systolic and diastolic blood pressure, in mm Hg.
+- `cholesterol` and `gluc`: 1 = normal, 2 = above normal, 3 = well above normal.
+- `smoke`, `alco` and `active` are 0/1.
+- **Target** `cardio`: 1 = cardiovascular disease present, 0 = absent.
 
-`artifacts/metrics.json`, `analysis.json`, `reliability.json` and `shift_analysis.json` are committed. Model files (including `models/novelty_detector.joblib`), `artifacts/oof_predictions.npz` and the dataset are not.
+**Split:** stratified 80/20 with seed 42, giving 54,858 train and 13,715 test rows.
 
-Command-line checks of the backend:
+### Reproducibility
 
-```bash
-python -m src.prediction
-```
-
-```bash
-python -m src.explainability
-```
-
-```bash
-python -m src.recommendations
-```
+- **Seeds:** every random step uses seed 42: the split, the CV folds, the models, the bootstraps and the perturbations.
+- **Repeatability:** regenerating gives identical selection decisions. Logistic Regression reproduces exactly; the tree models reproduce to floating-point precision (multithreaded training).
+- **Committed outputs:** `artifacts/metrics.json`, `analysis.json`, `reliability.json` and `shift_analysis.json` are committed, so the Model and Methodology pages can be read without retraining.
+- **Provenance:** each committed artifact carries a `provenance` block with the generation time, the Python and library versions, the dataset SHA-256 and the seed.
+- **Not committed:** model files (`models/*.joblib`), `artifacts/oof_predictions.npz` and the dataset. They are rebuilt by `setup.sh`.
+- **Loader checks:** the model loader refuses a model file that was built with different scikit-learn/XGBoost versions, or whose feature contract does not match the code. It tells you the command that regenerates it.
+- **Dependencies:** all are pinned in `requirements.txt`. Pickled scikit-learn/XGBoost models are only reliable on the versions that wrote them, so pins should be changed together with a full regeneration.
 
 ## Tests
 
@@ -186,7 +191,7 @@ python -m src.recommendations
 python -m pytest -q
 ```
 
-The suite contains 145 tests. It covers:
+The suite contains 148 tests. It covers:
 - metric definitions and invariants (threshold metrics are consistent, recall never rises with the threshold, net-benefit formula);
 - repeated CV (fixed seed, 25 disjoint splits, each row validated once per repeat) and out-of-fold leakage (a memorising model on random labels scores at chance);
 - test-set integrity: the final pipeline and calibrators are reproduced from training rows alone, the selection ignores scrambled test numbers, no threshold is tuned, and the novelty detector is fitted on training rows only;
@@ -196,7 +201,8 @@ The suite contains 145 tests. It covers:
 - SHAP reconciling with the model score and probability for every candidate model, within 1e-5;
 - what-if guardrails, the baseline being reproduced, and response curves staying in the valid domain;
 - guidance language;
-- every UI page driven through Streamlit's `AppTest`.
+- every UI page driven through Streamlit's `AppTest`;
+- portability: no machine-specific paths in tracked files, pinned requirements, provenance in committed artifacts, and stale model files rejected.
 
 ## Intended use and limitations
 
@@ -213,4 +219,15 @@ See the [model card](docs/model_card.md).
 - Ranking performance is weaker for ages 60–65.
 - Correlated blood-pressure features share explanation credit.
 - Prototype bands and thresholds are not clinical cut-offs.
-- The saved models are tied to the pinned scikit-learn version.
+- The saved models are tied to the pinned scikit-learn and XGBoost versions; the loader rejects a mismatch.
+- Setup is tested on macOS (Apple Silicon) with Python 3.12. Linux should work; Windows is untested.
+
+## Future work
+
+- External validation on a dataset with documented clinical provenance.
+- A monotone-constrained XGBoost model, evaluated under the same protocol, to address the step-wise and non-monotone responses.
+- Continuous integration that runs the test suite on every push.
+
+## License
+
+No license has been chosen yet. Until one is added, the code is public to read but all rights are reserved. The dataset is subject to its own terms on Kaggle.

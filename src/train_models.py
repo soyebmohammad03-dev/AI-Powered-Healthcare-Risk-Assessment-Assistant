@@ -1,7 +1,7 @@
 """Train and compare Logistic Regression, Random Forest and XGBoost, each raw and calibrated, with
 5x5 repeated stratified CV, and choose the final model with the pre-declared protocol below.
 
-Run: python -m src.train_models   (about 20 min; then src.analysis, src.reliability, src.shift_analysis)
+Run: python -m src.train_models   (several minutes; then src.analysis, src.reliability, src.shift_analysis)
 """
 import json
 
@@ -17,7 +17,7 @@ from sklearn.model_selection import RepeatedStratifiedKFold
 from sklearn.pipeline import Pipeline
 from xgboost import XGBClassifier
 
-from src.data_loader import ROOT, SEED, SOURCE, TARGET, clean, load_raw, split
+from src.data_loader import ROOT, SEED, SOURCE, TARGET, clean, load_raw, provenance, split
 from src.evaluate_models import (CV_SCORING, calibration_data, calibration_stats, corrected_resampled_ttest,
                                  evaluate, fold_assignment, full_metrics, oof_cross_validate, summarize_folds)
 from src.prediction import FINAL_MODEL_PATH
@@ -182,9 +182,10 @@ def main() -> dict:
         "calibration": selection["variant"],
         "calibration_reason": comparison[final]["calibration_reason"],
         "versions": {"scikit-learn": sklearn.__version__, "xgboost": xgboost.__version__},
+        "provenance": provenance(),
     }, FINAL_MODEL_PATH)
 
-    report = {"seed": SEED, "split": {"train": len(X_train), "test": len(X_test)},
+    report = {"provenance": provenance(), "seed": SEED, "split": {"train": len(X_train), "test": len(X_test)},
               "cv": {"scheme": "RepeatedStratifiedKFold", "n_splits": N_FOLDS, "n_repeats": N_REPEATS,
                      "random_state": SEED},
               "dataset": dataset_summary(raw, df, removed), "final_model": final,

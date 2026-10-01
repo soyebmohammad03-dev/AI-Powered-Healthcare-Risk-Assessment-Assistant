@@ -20,7 +20,7 @@ from sklearn.ensemble import IsolationForest
 from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import train_test_split
 
-from src.data_loader import ROOT, SEED, load_dataset, split
+from src.data_loader import ROOT, SEED, load_dataset, provenance, split
 from src.evaluate_models import calibration_data, calibration_stats, decision_curve, threshold_metrics
 from src.explainability import ModelExplainer
 from src.prediction import DEMO_INPUTS, PatientInput, load_model
@@ -353,7 +353,7 @@ def main() -> dict:
     base = baseline_profiles(X_test)
     pert = perturbations(base)
     print("perturbation rows", len(pert), flush=True)
-    report = {
+    report = {"provenance": provenance(),
         "final_model": final, "seed": SEED,
         "calibration": {**calibration_deep_dive(oof, y, metrics, final),
                         "test": calibration_on_test(X_train, y_train, X_test, y_test, candidates)},
