@@ -75,3 +75,36 @@ The `predicted_class` uses a 0.5 probability threshold on the dataset target. No
 - With an independent background, correlated features (for example `ca`, `thal`, `exang`, `oldpeak`) are treated as if they varied separately. Credit can therefore be shared among them in clinically unintuitive ways.
 - Explanations inherit every limitation of the model and the dataset.
 - User-facing wording therefore always says that a feature "contributed toward the model's estimate".
+
+## Informational guidance
+The system has three roles, kept in separate modules:
+- **ML model = prediction:** a probability for the dataset's target.
+- **SHAP = explanation:** which inputs moved that probability.
+- **Recommendation engine = general informational guidance:** what general information is worth showing next to the result.
+
+The guidance is never a medical judgement. It never states a condition, prescribes treatment or names medication.
+
+**Why rules, not an LLM.**
+- Safety-relevant text must be predictable and checkable.
+- An LLM can produce unsupported medical statements, varies from run to run, and cannot be exhaustively tested.
+- Each rule here is one explicit condition on an input value or on the model's probability.
+- The same input always gives the same output, and tests check the wording of every possible combination of band and trigger.
+
+**Prototype risk bands.** The bands are probability < 0.30 (lower), 0.30–0.60 (moderate) and ≥ 0.60 (higher).
+- They are presentation categories for this academic prototype, chosen for readability. They are not clinically validated thresholds.
+- The model itself is unchanged, and its 0.5 classification threshold sits inside the moderate band.
+
+**Rule triggers.**
+- **Resting blood pressure ≥ 130 mm Hg.** This matches the systolic value at which the ACC/AHA 2017 guideline's elevated/stage-1 range begins.
+- **Total cholesterol ≥ 200 mg/dl.** This is where NCEP ATP III's "borderline high" category begins.
+- **Fasting blood sugar > 120 mg/dl.** This is the dataset's own `fbs` flag.
+- **Exercise-induced angina reported.** This gives a high-priority suggestion to discuss the symptom, and it replaces the general "stay active" item. The engine never encourages exercise when an exertional symptom is reported.
+
+These reference points are used only to decide when to suggest a conversation with a healthcare professional. The dataset values are single measurements, so they cannot establish any condition.
+
+**Use of SHAP.** The engine takes the largest local SHAP contribution and reports it as model context: "the model placed the most weight on X". This item is labelled as a description of the model, not a medical cause. It is kept apart from the input-based items, and it never changes which guidance is shown.
+
+**Safety.**
+- No item says the user is healthy, safe or ill.
+- A lower estimate is stated as "does not rule out any health condition".
+- Every result comes with the `DISCLAIMER` text: an educational prototype, model-based, not a diagnosis, not a replacement for professional advice.
