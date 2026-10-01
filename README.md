@@ -13,7 +13,7 @@ Theme: Healthcare + Human-Centered AI + Explainable AI.
 | 2 | Model selection, persistence, prediction pipeline | Done |
 | 3 | SHAP explainability | Done |
 | 4 | Rule-based informational guidance | Done |
-| 5 | Streamlit application | Planned |
+| 5 | Streamlit application | Done |
 | 6 | Integration, testing, demo preparation | Planned |
 
 ```
@@ -250,6 +250,52 @@ python -m src.train_models
 
 This downloads the dataset if needed and trains all three models (about 15 seconds). It writes `models/final_model.joblib`, the per-model pipelines `models/{logistic_regression,random_forest,xgboost}.joblib`, and `artifacts/metrics.json`. Neither the model files nor the dataset are committed; run this once after cloning. The seed is fixed, so the results are identical each time.
 
+## Run the application
+
+After installing the dependencies and training the model once:
+
+```bash
+streamlit run app.py
+```
+
+The app opens at http://localhost:8501. It loads the saved model and never retrains it. If `models/final_model.joblib` is missing, the app shows a setup message with the training command instead of an error.
+
+### User workflow
+
+1. **Enter the 11 health inputs** in one form, or click *Example Patient A/B/C* to fill in a synthetic example.
+   - Categories appear as labels such as "Above normal", never as codes.
+   - Units are shown: years, cm, kg and mmHg.
+   - The model runs only when you click **Assess Risk**, not every time a field changes.
+2. **Validation** uses the existing `PatientInput` rules. Missing or invalid values, or systolic not above diastolic, produce a readable list of problems, and any earlier result is cleared.
+3. **Assessment result:**
+   - the model-estimated probability;
+   - the prototype band (Lower / Moderate / Higher), marked as a display category that is not clinically validated;
+   - a marker on a 0–100% band bar;
+   - a note that the result is not a diagnosis.
+
+   The 0.5 class output and the model name are in a "technical details" expander.
+4. **"Why did the model estimate this probability?"** is the SHAP explanation for this input:
+   - a horizontal bar chart of all 10 model features, labelled with readable names and the user's values, and coloured by whether each moved the estimate higher or lower;
+   - the top factors in each direction;
+   - a "How to read this chart" panel that relates the baseline (50.8%) to this result;
+   - the statement "model behaviour, not medical causation".
+5. **General guidance:** cards from the rule engine, with priority tags. Extra items sit under "More guidance".
+6. **Assessment summary:** the inputs in readable form, including the derived BMI.
+7. **Disclaimer and limitations** appear at the top and bottom of the page.
+
+The **About & Methodology** page shows the dataset and cleaning report, the measured model comparison from `artifacts/metrics.json`, the model-selection reasoning, the confusion matrix, the global SHAP importance and the limitations.
+
+### Application structure
+
+- `app.py` handles the UI only. All validation, prediction, SHAP and guidance come from `src/`. It contains:
+  - `load_engine()`: loads the saved model and builds the SHAP explainer, cached with `st.cache_resource` so this happens once per server;
+  - `engine()`: shows a setup message instead of a traceback when loading fails;
+  - `assessment_page()`: form → `PatientInput` → `predict` → `explain` → `generate` → render;
+  - `about_page()`: the methodology page, built from the measured `artifacts/metrics.json`;
+  - the two pages are registered with `st.navigation` / `st.Page`.
+- The latest assessment is kept in `st.session_state["assessment"]`, so it survives reruns and page switches. The form is refilled from it after a page switch, so the form and the result always match.
+- `.streamlit/config.toml` sets the theme (light, teal accent), a minimal toolbar, and no usage statistics.
+
 ## Run the backend from the command line
 
 ```bash
@@ -270,12 +316,13 @@ python -m src.recommendations
 python -m pytest -q
 ```
 
-The tests use the real dataset and the saved model; they download and train once if either is missing.
+The tests use the real dataset and the saved model; they download and train once if either is missing. `tests/test_app.py` drives the Streamlit UI with `streamlit.testing.v1.AppTest`. It submits the demo inputs end to end, and checks invalid input, stale-result clearing, a missing model and the About page.
 
 ## Project structure
 
 ```
-app.py                  Streamlit app (Phase 5)
+app.py                  Streamlit UI (assessment + About & Methodology pages)
+.streamlit/config.toml  Streamlit theme and client settings
 data/                   cardio_train.csv (downloaded, not committed)
 models/                 Trained pipelines, incl. final_model.joblib (generated)
 artifacts/metrics.json  Measured results, cleaning report, model-selection reasoning

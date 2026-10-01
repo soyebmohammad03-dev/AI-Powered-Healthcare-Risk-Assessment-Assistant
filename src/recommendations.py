@@ -25,8 +25,8 @@ LOWER_BELOW = 0.30
 HIGHER_FROM = 0.60
 
 # Prototype rule triggers aligned with commonly cited reference points; not diagnostic cut-offs.
-SYSTOLIC_TRIGGER = 130   # mm Hg } ACC/AHA 2017: the elevated/stage-1 range begins at 130 systolic
-DIASTOLIC_TRIGGER = 80   # mm Hg }               or 80 diastolic
+SYSTOLIC_TRIGGER = 130   # mmHg } ACC/AHA 2017: the elevated/stage-1 range begins at 130 systolic
+DIASTOLIC_TRIGGER = 80   # mmHg }               or 80 diastolic
 BMI_LOW, BMI_HIGH = 18.5, 25.0  # WHO adult BMI categories: below 18.5 / 25 and above
 
 MAX_INPUT_ITEMS = 3      # shown after the follow-up item; the rest go to Guidance.additional
@@ -111,8 +111,8 @@ def _input_rules(patient: PatientInput) -> list[Recommendation]:
     if patient.ap_hi >= SYSTOLIC_TRIGGER or patient.ap_lo >= DIASTOLIC_TRIGGER:
         recs.append(Recommendation(
             Category.BLOOD_PRESSURE, "Review your blood pressure readings",
-            f"The reported blood pressure ({patient.ap_hi:g}/{patient.ap_lo:g} mm Hg) is at or above the "
-            f"{SYSTOLIC_TRIGGER}/{DIASTOLIC_TRIGGER} mm Hg level this prototype uses as a prompt. A single "
+            f"The reported blood pressure ({patient.ap_hi:g}/{patient.ap_lo:g} mmHg) is at or above the "
+            f"{SYSTOLIC_TRIGGER}/{DIASTOLIC_TRIGGER} mmHg level this prototype uses as a prompt. A single "
             "reading says little on its own; consider discussing your blood pressure with a qualified "
             "healthcare professional.",
             Priority.MODERATE, f"ap_hi = {patient.ap_hi:g}, ap_lo = {patient.ap_lo:g}"))
