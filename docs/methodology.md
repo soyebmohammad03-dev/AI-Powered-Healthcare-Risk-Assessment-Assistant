@@ -1,110 +1,127 @@
 # Methodology
 
 ## Data
-The data is the UCI Heart Disease Cleveland subset: 303 records, each with 13 clinical features. The dataset's documentation lists 14 attributes; the 13 features are those attributes minus the original target `num`. That target takes values 0 (no disease) and 1–4 (disease present; the levels relate to angiographic narrowing). Following the dataset's own description of the standard task, it is binarized as presence (1–4) versus absence (0).
+**Source.** The data is the Cardiovascular Disease dataset by Svetlana Ulianova, published on Kaggle as `sulianova/cardiovascular-disease-dataset`. The file is `cardio_train.csv`. It is downloaded from Kaggle's public API endpoint and checked against a SHA-256 hash, and it is not redistributed in this repository.
 
-The data was inspected before any preprocessing:
-- All categorical codes in the file match the documentation.
-- `restecg = 1` is rare (4 records).
-- `ca` has 4 missing values and `thal` has 2, both recorded as `?`.
-- There are no other missing values.
+**What the raw file contains.** It was inspected before any processing:
+- 70,000 rows and 13 columns, separated by semicolons.
+- No missing values and no duplicate ids.
+- 24 records that are identical apart from `id`.
+- A balanced binary target, `cardio`: 35,021 absent and 34,979 present.
+- Clear measurement errors. Blood pressure ranges from −150 to 16,020 mm Hg, height from 55 to 250 cm, and weight goes down to 10 kg. 1,234 rows have systolic pressure below diastolic.
+
+**Cleaning.** The cleaning rules are data-quality rules. They remove values that cannot be real measurements; they are not medical thresholds and were not tuned to improve model scores. They are applied in this order, and the number of rows removed by each is recorded in `artifacts/metrics.json`:
+1. Malformed, missing or non-numeric values (0 rows).
+2. Target not 0 or 1 (0 rows).
+3. Undocumented category codes (0 rows).
+4. Duplicate records, ignoring `id` (24 rows). These are removed before the split so identical records cannot appear in both the training and test sets.
+5. Age outside 29–65 years (0 rows).
+6. Height outside 120–220 cm (53 rows).
+7. Weight outside 30–250 kg (7 rows).
+8. Systolic outside 60–250 mm Hg (226 rows).
+9. Diastolic outside 30–200 mm Hg (989 rows; most are values like 1000 or 1100).
+10. Systolic not above diastolic (103 rows).
+11. BMI outside 12–60 (25 rows).
+
+The result is 68,573 records: 34,646 absent and 33,927 present. The same ranges are used to validate user input, so the model is never asked about values its training data excluded.
+
+**Features.**
+- `id` is dropped; it is an identifier, never a feature.
+- `age` is converted from days to years (days / 365.25).
+- `gender` uses codes 1 and 2, which the source does not label. 1 = female is inferred from mean height (161 cm vs 170 cm).
+- `cholesterol` and `gluc` are three-level categories: normal, above normal and well above normal.
+- `smoke`, `alco` and `active` are self-reported 0/1 values.
+
+**Derived feature.** BMI = weight / (height in m)² is the only derived feature, for two reasons:
+- It is a standard, interpretable way to combine height and weight.
+- In a check on the training split, adding raw height and weight back alongside BMI changed 5-fold ROC-AUC by at most 0.0002.
+
+Pulse pressure (`ap_hi − ap_lo`) was considered and rejected. It is an exact linear combination of two existing features, so it adds no information and would make the linear model's SHAP credit arbitrary. The same check showed no gain.
 
 ## Preprocessing
-All preprocessing runs inside one scikit-learn `Pipeline` per model, so imputation and scaling are fitted only on training folds. This prevents information from the test data leaking into training.
-- Numeric features (age, trestbps, chol, thalach, oldpeak, ca) use median imputation followed by standard scaling. `ca` counts vessels from 0 to 3, so it is treated as ordinal.
-- Categorical features (sex, cp, fbs, restecg, exang, slope, thal) use most-frequent imputation followed by one-hot encoding. The encoding uses a fixed list of documented codes. Binary features are encoded as a single column, and an unknown code raises an error.
+Preprocessing is a single scikit-learn `Pipeline` stored inside each model pipeline. It derives BMI, standard-scales the numeric features (age, BMI, `ap_hi`, `ap_lo`), and one-hot encodes the categorical features. The encoder uses the fixed list of documented codes, and an unknown code raises an error.
+
+Three things prevent information leaking from test data into training:
+- Duplicates are removed before the split.
+- The split is stratified 80/20 with seed 42 (54,858 train and 13,715 test records).
+- Every learned step (scaler, encoder) is fitted on training data only. During cross-validation it is fitted inside each training fold. A test checks that the scaler's means equal the training-split means.
 
 ## Evaluation
-1. The data is split 80/20 into train and test sets, stratified by class, with seed 42.
-2. Stratified 5-fold cross-validation on the training set is used to compare models.
-3. Each model is then refitted on the full training set and scored once on the held-out test set.
+1. Stratified 5-fold cross-validation on the training set compares the three models.
+2. Each model is then refitted on the full training set and scored once on the held-out test set.
 
-Metrics reported: accuracy, precision, recall, F1, ROC-AUC, and the confusion matrix. Measured values are in `artifacts/metrics.json` and the README.
+Metrics: accuracy, precision, recall, F1, ROC-AUC and the confusion matrix. All three models have a CV standard deviation of 0.01 or less on every metric, and each model's test scores agree with its CV scores.
 
 ## Model selection
-Logistic Regression was chosen as the final prototype model. It has the best 5-fold cross-validation ROC-AUC (0.907 ± 0.018), accuracy, precision and F1 of the three models. It is also directly interpretable: each feature contributes through one learned coefficient, which suits an explainable healthcare prototype.
+| Model | CV ROC-AUC | CV accuracy | Test ROC-AUC |
+|---|---|---|---|
+| Logistic Regression | 0.791 ± 0.004 | 0.728 | 0.793 |
+| Random Forest | 0.800 ± 0.004 | 0.733 | 0.803 |
+| XGBoost | 0.801 ± 0.004 | 0.735 | 0.804 |
 
-The model was not chosen on the held-out test set. That set has only 61 records, so a single prediction moves accuracy by about 1.6 points. Random Forest and XGBoost remain saved and reported as comparison artifacts.
+Logistic Regression is the final prototype model. The tree models are better by about 0.01 ROC-AUC and less than 1 point of accuracy. The models are equally stable, so this gap is the only trade-off.
 
-The final model is the pipeline fitted on the 242 training records. It is not refitted on all 303 records, so the test metrics reported for it describe exactly the saved model.
+For an explainable decision-support product, interpretability is weighted above this gap:
+- Logistic Regression's effects are monotone and global. A higher systolic pressure always raises its estimate.
+- Its SHAP values are exact and have a closed form, `coef × (x − mean)`, which can be checked by hand.
+
+The decision was made on cross-validation, not on the test set. The reasoning is also saved in `artifacts/metrics.json`. Switching to XGBoost would need SHAP's `TreeExplainer`, which is not implemented.
+
+The final model is the pipeline fitted on the training split. It is not refitted on all of the data, so its reported test metrics describe exactly the saved model.
 
 ## Persistence and inference
-Training (`src/train_models.py`) saves `models/final_model.joblib`, a dictionary containing:
-- the fitted `Pipeline` (preprocessor and classifier),
-- the feature list,
-- the category codes,
-- the seed,
-- the test metrics,
-- the library versions.
+`models/final_model.joblib` stores:
+- the fitted pipeline: BMI derivation → scaler and encoder → classifier;
+- the input and model feature lists;
+- the category codes;
+- the seed, the test metrics and the library versions.
 
-Inference (`src/prediction.py`) is a separate module. It never trains anything. It loads the dictionary, checks it against the current feature contract, and calls `predict_proba` on the same pipeline object. This means the preprocessing at inference time is the training preprocessing, not a re-implementation of it. Tests confirm two things:
-- The persisted pipeline reproduces the stored test metrics exactly.
-- Its preprocessor produces the same output as a freshly fitted preprocessor on the same training split.
-
-Training data and inference input are handled differently in two ways:
-- **Missing values:** the training data had 6 missing values (`ca`, `thal`), which the pipeline imputes. At inference, every field is required, so imputation is never relied on for a user's own value.
-- **Input validation:** inference input is checked by the `PatientInput` contract. Values must be numeric, categorical codes must be documented ones, and numeric values must fall within sanity bounds before they reach the model.
-
-The `predicted_class` uses a 0.5 probability threshold on the dataset target. No clinical risk thresholds are defined in this layer.
+`src/prediction.py` loads this file, checks it against the current schema, validates the input through `PatientInput`, and calls `predict_proba`. Because the preprocessing used at inference is the training preprocessing object itself, the two cannot disagree. Tests confirm two things:
+- the saved model reproduces its stored test metrics exactly;
+- its preprocessing matches a freshly fitted preprocessor on the same training split.
 
 ## Explainability (SHAP)
-**Why.** A probability on its own is not enough for a human-centred healthcare prototype. A user also needs to see which inputs moved the model's estimate. SHAP provides this. It is grounded in Shapley values from game theory, and its contributions are additive: the base value plus the sum of all contributions equals the model output exactly.
+**Explainer.** `shap.LinearExplainer` is applied to the classifier's 14 preprocessed columns. It uses an `Independent` masker whose background is all 54,858 preprocessed training records; the default subsample of 100 is disabled. Each column's SHAP value is `coef_j × (x_j − mean_j)`, and a test recomputes this formula without SHAP.
 
-**Explainer.** The final model is a logistic regression, so `shap.LinearExplainer` is used. It is SHAP's model-specific explainer for linear models.
-- It explains the classifier on its real inputs, which are the 22 preprocessed columns.
-- It uses an `Independent` masker whose background is all 242 preprocessed training records. The default would subsample 100 of them; this is disabled.
-- With this setup, each column's SHAP value is `coef_j × (x_j − mean_j)`. A test recomputes this formula without SHAP and checks that the values match.
+**Units.** The values are log-odds. The base value is +0.032, the model's output at the mean training record, which corresponds to a probability of 0.508. For every input, `sigmoid(base + Σ SHAP)` equals the probability returned by `predict()`.
 
-**Output space.** The values are log-odds, which is the scale of `decision_function`, not probabilities.
-- The base value (−0.071 log-odds) is the model's output at the mean of the preprocessed training data. Converted to a probability it is 0.482.
-- For any input, `sigmoid(base + Σ SHAP)` equals the probability returned by the prediction service. Tests check this.
-- Contributions should therefore be read as "pushed the estimate up" or "pushed the estimate down", not as percentage points.
-
-**Mapping columns back to features.** The preprocessing turns each numeric feature into one scaled column. Each categorical feature becomes one column per category, except binary features, which become a single column.
-- The explainer reads each feature's column count from the fitted `OneHotEncoder` (`categories_`, `drop_idx_`).
-- It checks the result against `get_feature_names_out()`.
-- It sums the column SHAP values belonging to each original feature. Summing is exact because SHAP is additive.
-- Each feature's sum is reported once, with its readable label and the patient's original value. For example, "Chest pain type: Asymptomatic" replaces `cat__cp_4.0`.
+**Mapping columns back to features.**
+- Numeric features map one-to-one.
+- For each categorical feature, the explainer reads its number of one-hot columns from the fitted encoder (`categories_`, `drop_idx_`) and checks this against `get_feature_names_out()`.
+- The SHAP values of those columns are summed, which is exact because SHAP is additive.
+- Height and weight reach the model only through BMI, so the explanation reports "BMI (from height and weight)".
 
 **Local and global explanations.**
-- **Local:** one patient's per-feature contributions, ranked by size. Each contribution also gets a direction and a share of the total absolute contribution.
-- **Global:** the mean absolute grouped SHAP value per feature across all 303 records, ranked. Rows are grouped by feature before taking absolute values, so a feature's one-hot columns cannot cancel each other or be double counted.
+- **Local:** the per-feature contributions for one input, ranked by size, each with a direction and its share of the total.
+- **Global:** the mean absolute contribution per feature across all 68,573 cleaned records. Columns are grouped into features before absolute values are taken.
 
 **Limitations.**
-- SHAP explains the trained model's behaviour, not human physiology. A large contribution is not evidence of medical causation.
-- With an independent background, correlated features (for example `ca`, `thal`, `exang`, `oldpeak`) are treated as if they varied separately. Credit can therefore be shared among them in clinically unintuitive ways.
-- Explanations inherit every limitation of the model and the dataset.
-- User-facing wording therefore always says that a feature "contributed toward the model's estimate".
+- These values describe how the model weighted the input features. They do not describe medical causation.
+- Correlated features can split credit unintuitively.
+- The model has learned dataset-specific patterns. Smokers and drinkers show slightly lower disease rates in this data, so Smoking = Yes receives a small negative contribution. This is confounded (for example, smoking is far more common in gender code 2) and must not be read as a health effect.
 
 ## Informational guidance
-The system has three roles, kept in separate modules:
-- **ML model = prediction:** a probability for the dataset's target.
-- **SHAP = explanation:** which inputs moved that probability.
-- **Recommendation engine = general informational guidance:** what general information is worth showing next to the result.
+The system has three roles:
+- **ML model = prediction**
+- **SHAP = explanation**
+- **Recommendation engine = general informational guidance**
 
-The guidance is never a medical judgement. It never states a condition, prescribes treatment or names medication.
+**Why rules, not an LLM.** The guidance uses explicit, deterministic rules. Safety-relevant text must be predictable, inspectable and testable. An LLM can generate unsupported medical statements and varies between runs.
 
-**Why rules, not an LLM.**
-- Safety-relevant text must be predictable and checkable.
-- An LLM can produce unsupported medical statements, varies from run to run, and cannot be exhaustively tested.
-- Each rule here is one explicit condition on an input value or on the model's probability.
-- The same input always gives the same output, and tests check the wording of every possible combination of band and trigger.
+**What the rules use.** The rules read only the current schema: blood pressure, the cholesterol and glucose categories, smoking, BMI, physical activity and alcohol, plus the model's probability band. They do not use SHAP values to decide what to show. This is deliberate: when the model has learned a confounded pattern, such as for smoking, the guidance still follows the input itself.
 
-**Prototype risk bands.** The bands are probability < 0.30 (lower), 0.30–0.60 (moderate) and ≥ 0.60 (higher).
-- They are presentation categories for this academic prototype, chosen for readability. They are not clinically validated thresholds.
-- The model itself is unchanged, and its 0.5 classification threshold sits inside the moderate band.
+**Prototype bands.** Probability < 0.30 is lower, 0.30 to < 0.60 is moderate, and ≥ 0.60 is higher. These are presentation categories, not clinically validated thresholds, and the model's 0.5 classification threshold is unchanged.
 
-**Rule triggers.**
-- **Resting blood pressure ≥ 130 mm Hg.** This matches the systolic value at which the ACC/AHA 2017 guideline's elevated/stage-1 range begins.
-- **Total cholesterol ≥ 200 mg/dl.** This is where NCEP ATP III's "borderline high" category begins.
-- **Fasting blood sugar > 120 mg/dl.** This is the dataset's own `fbs` flag.
-- **Exercise-induced angina reported.** This gives a high-priority suggestion to discuss the symptom, and it replaces the general "stay active" item. The engine never encourages exercise when an exertional symptom is reported.
+**Rule triggers.** These are prompts to discuss a value with a professional, not diagnostic cut-offs:
+- blood pressure of 130/80 or more (where the ACC/AHA 2017 elevated/stage-1 range begins);
+- cholesterol or glucose reported as above normal (the dataset's own category);
+- BMI below 18.5 or 25 and above (WHO adult categories);
+- smoking, alcohol intake, and physical activity as reported.
 
-These reference points are used only to decide when to suggest a conversation with a healthcare professional. The dataset values are single measurements, so they cannot establish any condition.
-
-**Use of SHAP.** The engine takes the largest local SHAP contribution and reports it as model context: "the model placed the most weight on X". This item is labelled as a description of the model, not a medical cause. It is kept apart from the input-based items, and it never changes which guidance is shown.
+**How items are shown.** The follow-up item comes first, then at most 3 input items by priority, then the model-context note. The remaining triggered items are kept in `Guidance.additional`.
 
 **Safety.**
-- No item says the user is healthy, safe or ill.
-- A lower estimate is stated as "does not rule out any health condition".
-- Every result comes with the `DISCLAIMER` text: an educational prototype, model-based, not a diagnosis, not a replacement for professional advice.
+- No item states a condition, says the user is healthy, or names medication or treatment.
+- A lower estimate is described as "does not rule out any health condition".
+- A shared `DISCLAIMER` accompanies every result.
+- Tests sweep every band and trigger combination for prohibited wording.

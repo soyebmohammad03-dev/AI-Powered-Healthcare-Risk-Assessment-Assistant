@@ -1,59 +1,82 @@
-"""Feature definitions and the preprocessing pipeline shared by all models."""
+"""Feature schema, plausibility ranges, derived features and the preprocessing pipeline."""
+import pandas as pd
 from sklearn.compose import ColumnTransformer
-from sklearn.impute import SimpleImputer
-from sklearn.pipeline import make_pipeline
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import FunctionTransformer, OneHotEncoder, StandardScaler
 
-# ca (number of major vessels, 0-3) is ordinal, so it is treated as numeric.
-NUMERIC = ["age", "trestbps", "chol", "thalach", "oldpeak", "ca"]
-# Valid codes per the dataset documentation (heart-disease.names); all occur in the Cleveland data.
+# What the user/dataset provides (age already converted from days to years by the data loader).
+FEATURES = ["age", "gender", "height", "weight", "ap_hi", "ap_lo",
+            "cholesterol", "gluc", "smoke", "alco", "active"]
+
+# What the classifier sees. BMI replaces height and weight (adding them back changed CV ROC-AUC by
+# <= 0.0002); pulse pressure (ap_hi - ap_lo) is not added because it is an exact linear combination.
+NUMERIC = ["age", "bmi", "ap_hi", "ap_lo"]
+# Codes as distributed with the dataset. gender: 1 vs 2 is not labelled in the source; 1 = female is
+# inferred from mean height (161 cm vs 170 cm), the usual reading of this dataset.
 CATEGORIES = {
-    "sex": [0.0, 1.0],               # 0 female, 1 male
-    "cp": [1.0, 2.0, 3.0, 4.0],      # typical angina, atypical angina, non-anginal pain, asymptomatic
-    "fbs": [0.0, 1.0],               # fasting blood sugar > 120 mg/dl
-    "restecg": [0.0, 1.0, 2.0],      # normal, ST-T abnormality, left ventricular hypertrophy
-    "exang": [0.0, 1.0],             # exercise-induced angina
-    "slope": [1.0, 2.0, 3.0],        # upsloping, flat, downsloping
-    "thal": [3.0, 6.0, 7.0],         # normal, fixed defect, reversible defect
+    "gender": [1, 2],
+    "cholesterol": [1, 2, 3],   # normal, above normal, well above normal
+    "gluc": [1, 2, 3],          # normal, above normal, well above normal
+    "smoke": [0, 1],
+    "alco": [0, 1],
+    "active": [0, 1],
 }
 CATEGORICAL = list(CATEGORIES)
-FEATURES = NUMERIC + CATEGORICAL
+MODEL_FEATURES = NUMERIC + CATEGORICAL
 
-# Human-readable names and code meanings (same source as above), for explanations and the UI.
+# Data-quality plausibility ranges (inclusive), shared by dataset cleaning and input validation.
+# They remove recording errors (e.g. ap_hi = 16020, height = 55 cm); they are NOT clinical thresholds.
+PLAUSIBLE = {
+    "age": (29, 65),        # years; the range the dataset covers (29.6-64.9), so no extrapolation
+    "height": (120, 220),   # cm
+    "weight": (30, 250),    # kg
+    "ap_hi": (60, 250),     # mm Hg
+    "ap_lo": (30, 200),     # mm Hg; additionally ap_hi must exceed ap_lo
+    "bmi": (12, 60),        # catches height/weight combinations that are each plausible but not together
+}
+
 FEATURE_LABELS = {
     "age": "Age",
-    "sex": "Sex",
-    "cp": "Chest pain type",
-    "trestbps": "Resting blood pressure",
-    "chol": "Cholesterol",
-    "fbs": "Fasting blood sugar > 120 mg/dl",
-    "restecg": "Resting ECG",
-    "thalach": "Maximum heart rate",
-    "exang": "Exercise-induced angina",
-    "oldpeak": "ST depression (exercise vs rest)",
-    "slope": "Slope of peak exercise ST segment",
-    "ca": "Major vessels coloured by fluoroscopy",
-    "thal": "Thallium stress test",
+    "gender": "Gender",
+    "height": "Height",
+    "weight": "Weight",
+    "bmi": "BMI (from height and weight)",
+    "ap_hi": "Systolic blood pressure",
+    "ap_lo": "Diastolic blood pressure",
+    "cholesterol": "Cholesterol",
+    "gluc": "Glucose",
+    "smoke": "Smoking",
+    "alco": "Alcohol intake",
+    "active": "Physical activity",
 }
+LEVELS = {1: "Normal", 2: "Above normal", 3: "Well above normal"}
 CATEGORY_LABELS = {
-    "sex": {0: "Female", 1: "Male"},
-    "cp": {1: "Typical angina", 2: "Atypical angina", 3: "Non-anginal pain", 4: "Asymptomatic"},
-    "fbs": {0: "No", 1: "Yes"},
-    "restecg": {0: "Normal", 1: "ST-T wave abnormality", 2: "Left ventricular hypertrophy"},
-    "exang": {0: "No", 1: "Yes"},
-    "slope": {1: "Upsloping", 2: "Flat", 3: "Downsloping"},
-    "thal": {3: "Normal", 6: "Fixed defect", 7: "Reversible defect"},
+    "gender": {1: "Female", 2: "Male"},
+    "cholesterol": LEVELS,
+    "gluc": LEVELS,
+    "smoke": {0: "No", 1: "Yes"},
+    "alco": {0: "No", 1: "Yes"},
+    "active": {0: "No", 1: "Yes"},
 }
 
 
-def build_preprocessor() -> ColumnTransformer:
-    # Imputers only matter for the 6 missing ca/thal values; they are fit on training data only.
-    # Explicit categories: rare codes (restecg=1 has 4 rows) stay encoded even when a CV fold lacks them,
-    # and an undocumented code raises instead of being silently zeroed.
-    return ColumnTransformer([
-        ("num", make_pipeline(SimpleImputer(strategy="median"), StandardScaler()), NUMERIC),
-        ("cat", make_pipeline(SimpleImputer(strategy="most_frequent"),
-                              OneHotEncoder(categories=list(CATEGORIES.values()), drop="if_binary",
-                                            sparse_output=False)),
+def bmi(height_cm, weight_kg):
+    return weight_kg / (height_cm / 100) ** 2
+
+
+def add_bmi(X: pd.DataFrame) -> pd.DataFrame:
+    return X.assign(bmi=bmi(X["height"], X["weight"]))
+
+
+def build_preprocessor() -> Pipeline:
+    """Raw FEATURES -> add BMI -> scale numerics, one-hot categoricals (height/weight dropped).
+
+    Lives inside the persisted model pipeline, so training and inference derive features identically,
+    and every learned step (scaler, encoder) is fit on training data only.
+    """
+    encode = ColumnTransformer([
+        ("num", StandardScaler(), NUMERIC),
+        ("cat", OneHotEncoder(categories=list(CATEGORIES.values()), drop="if_binary", sparse_output=False),
          CATEGORICAL),
     ])
+    return Pipeline([("derive", FunctionTransformer(add_bmi)), ("encode", encode)])

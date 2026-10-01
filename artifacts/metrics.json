@@ -1,93 +1,111 @@
 {
   "seed": 42,
   "split": {
-    "train": 242,
-    "test": 61
+    "train": 54858,
+    "test": 13715
   },
   "dataset": {
-    "source": "https://archive.ics.uci.edu/ml/machine-learning-databases/heart-disease/processed.cleveland.data",
-    "records": 303,
-    "features": [
+    "source": "https://www.kaggle.com/datasets/sulianova/cardiovascular-disease-dataset",
+    "raw_records": 70000,
+    "clean_records": 68573,
+    "removed_by_rule": {
+      "malformed_or_missing": 0,
+      "invalid_target": 0,
+      "invalid_category_code": 0,
+      "duplicate_record": 24,
+      "age_out_of_range": 0,
+      "height_out_of_range": 53,
+      "weight_out_of_range": 7,
+      "ap_hi_out_of_range": 226,
+      "ap_lo_out_of_range": 989,
+      "ap_hi_not_above_ap_lo": 103,
+      "bmi_out_of_range": 25
+    },
+    "input_features": [
       "age",
-      "trestbps",
-      "chol",
-      "thalach",
-      "oldpeak",
-      "ca",
-      "sex",
-      "cp",
-      "fbs",
-      "restecg",
-      "exang",
-      "slope",
-      "thal"
+      "gender",
+      "height",
+      "weight",
+      "ap_hi",
+      "ap_lo",
+      "cholesterol",
+      "gluc",
+      "smoke",
+      "alco",
+      "active"
+    ],
+    "model_features": [
+      "age",
+      "bmi",
+      "ap_hi",
+      "ap_lo",
+      "gender",
+      "cholesterol",
+      "gluc",
+      "smoke",
+      "alco",
+      "active"
     ],
     "numeric": [
       "age",
-      "trestbps",
-      "chol",
-      "thalach",
-      "oldpeak",
-      "ca"
+      "bmi",
+      "ap_hi",
+      "ap_lo"
     ],
     "categorical": [
-      "sex",
-      "cp",
-      "fbs",
-      "restecg",
-      "exang",
-      "slope",
-      "thal"
+      "gender",
+      "cholesterol",
+      "gluc",
+      "smoke",
+      "alco",
+      "active"
     ],
-    "target": "target = 1 if original 'num' > 0 (disease present), else 0",
+    "target": "cardio: 1 = cardiovascular disease present, 0 = absent",
     "class_counts": {
-      "0": 164,
-      "1": 139
-    },
-    "missing_values": {
-      "ca": 4,
-      "thal": 2
+      "0": 34646,
+      "1": 33927
     }
   },
   "final_model": "logistic_regression",
+  "final_model_reason": "XGBoost and Random Forest lead by about 0.01 ROC-AUC (CV 0.801 / 0.800 vs 0.791) and under 1 point of accuracy. All three are equally stable (CV std <= 0.01) and match their test scores. Logistic Regression is kept: its effects are monotone and global, its SHAP values are exact (coef x (x - mean)) and easy to explain, which outweighs the small performance gap for an explainable decision-support prototype.",
   "models": {
     "logistic_regression": {
       "cv_train_5fold": {
         "accuracy": {
-          "mean": 0.8387755102040815,
-          "std": 0.01611478692183707
+          "mean": 0.728243975525175,
+          "std": 0.003809754947796994
         },
         "precision": {
-          "mean": 0.8768976789800588,
-          "std": 0.07138146493151333
+          "mean": 0.7557050010566014,
+          "std": 0.004050888128211894
         },
         "recall": {
-          "mean": 0.7656126482213439,
-          "std": 0.04511126604766409
+          "mean": 0.6660769703031822,
+          "std": 0.009892576443251342
         },
         "f1": {
-          "mean": 0.8135569462398731,
-          "std": 0.009755348178810085
+          "mean": 0.7080182062827326,
+          "std": 0.005621002561748477
         },
         "roc_auc": {
-          "mean": 0.9068573133790526,
-          "std": 0.01770678153276908
+          "mean": 0.7913105460232938,
+          "std": 0.004107105702444995
         }
       },
       "test": {
-        "accuracy": 0.8688524590163934,
-        "precision": 0.8125,
-        "recall": 0.9285714285714286,
-        "f1": 0.8666666666666667,
-        "roc_auc": 0.9577922077922079,
+        "accuracy": 0.727451695224207,
+        "precision": 0.7549347607895617,
+        "recall": 0.6650456822870616,
+        "f1": 0.7071450955813224,
+        "roc_auc": 0.7931745453878817,
         "confusion_matrix": [
           [
-            27,
-            6
+            5464,
+            1465
           ],
           [
-            2,
-            26
+            2273,
+            4513
           ]
         ]
       }
@@ -95,40 +113,40 @@
     "random_forest": {
       "cv_train_5fold": {
         "accuracy": {
-          "mean": 0.8262755102040815,
-          "std": 0.02886350547425413
+          "mean": 0.7330928291944431,
+          "std": 0.0034677214819999994
         },
         "precision": {
-          "mean": 0.8312953576687592,
-          "std": 0.032339316482461127
+          "mean": 0.76393786284967,
+          "std": 0.003544539466478952
         },
         "recall": {
-          "mean": 0.782608695652174,
-          "std": 0.0892878289186563
+          "mean": 0.6664822421904365,
+          "std": 0.007628353691888908
         },
         "f1": {
-          "mean": 0.8024825174825174,
-          "std": 0.043293208726708735
+          "mean": 0.7118653334551175,
+          "std": 0.004785716073151625
         },
         "roc_auc": {
-          "mean": 0.8951814690945126,
-          "std": 0.024572934868250594
+          "mean": 0.7997916962853207,
+          "std": 0.003827463644268664
         }
       },
       "test": {
-        "accuracy": 0.8852459016393442,
-        "precision": 0.8387096774193549,
-        "recall": 0.9285714285714286,
-        "f1": 0.8813559322033898,
-        "roc_auc": 0.948051948051948,
+        "accuracy": 0.736201239518775,
+        "precision": 0.7648829431438127,
+        "recall": 0.6740347774830533,
+        "f1": 0.716590944696851,
+        "roc_auc": 0.8025772394728955,
         "confusion_matrix": [
           [
-            28,
-            5
+            5523,
+            1406
           ],
           [
-            2,
-            26
+            2212,
+            4574
           ]
         ]
       }
@@ -136,40 +154,40 @@
     "xgboost": {
       "cv_train_5fold": {
         "accuracy": {
-          "mean": 0.8056122448979591,
-          "std": 0.04338018350770867
+          "mean": 0.7352255721535179,
+          "std": 0.002713700267359475
         },
         "precision": {
-          "mean": 0.8052787601414604,
-          "std": 0.05958546430788134
+          "mean": 0.7533820501309829,
+          "std": 0.002523815385752802
         },
         "recall": {
-          "mean": 0.7652173913043478,
-          "std": 0.06815632220785812
+          "mean": 0.6910576039346543,
+          "std": 0.006626274546795885
         },
         "f1": {
-          "mean": 0.7824260633910688,
-          "std": 0.048772086338903044
+          "mean": 0.7208570030452554,
+          "std": 0.0038160792391596973
         },
         "roc_auc": {
-          "mean": 0.867045595306465,
-          "std": 0.027288714302465957
+          "mean": 0.8006213893845429,
+          "std": 0.0036195183976918768
         }
       },
       "test": {
-        "accuracy": 0.9180327868852459,
-        "precision": 0.8709677419354839,
-        "recall": 0.9642857142857143,
-        "f1": 0.9152542372881356,
-        "roc_auc": 0.946969696969697,
+        "accuracy": 0.7366387167335035,
+        "precision": 0.7554732775273664,
+        "recall": 0.6915708812260536,
+        "f1": 0.7221110940144637,
+        "roc_auc": 0.8041997551094748,
         "confusion_matrix": [
           [
-            29,
-            4
+            5410,
+            1519
           ],
           [
-            1,
-            27
+            2093,
+            4693
           ]
         ]
       }

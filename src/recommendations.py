@@ -3,13 +3,15 @@
 Run `python -m src.recommendations` to generate guidance for the demo inputs.
 
 ML model = prediction | SHAP = explanation | this module = general informational guidance.
-All thresholds here are PROTOTYPE presentation/trigger rules, not clinical diagnostic thresholds.
+Rules read the user's own inputs (and the model's probability band); they never use SHAP to decide
+what to recommend. All thresholds are PROTOTYPE prompts, not clinical diagnostic thresholds.
 """
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from enum import Enum
 
 from src.explainability import POSITIVE, LocalExplanation
 from src.prediction import PatientInput, PredictionResult
+from src.preprocessing import CATEGORY_LABELS
 
 DISCLAIMER = (
     "Educational AI prototype. Results are model-based estimates for information only. "
@@ -22,9 +24,12 @@ DISCLAIMER = (
 LOWER_BELOW = 0.30
 HIGHER_FROM = 0.60
 
-# Prototype rule triggers, chosen to align with commonly cited reference points; not diagnostic cut-offs.
-BP_TRIGGER = 130    # resting systolic mm Hg; ACC/AHA 2017 elevated/stage-1 systolic range starts at 130
-CHOL_TRIGGER = 200  # total serum cholesterol mg/dl; NCEP ATP III "borderline high" starts at 200
+# Prototype rule triggers aligned with commonly cited reference points; not diagnostic cut-offs.
+SYSTOLIC_TRIGGER = 130   # mm Hg } ACC/AHA 2017: the elevated/stage-1 range begins at 130 systolic
+DIASTOLIC_TRIGGER = 80   # mm Hg }               or 80 diastolic
+BMI_LOW, BMI_HIGH = 18.5, 25.0  # WHO adult BMI categories: below 18.5 / 25 and above
+
+MAX_INPUT_ITEMS = 3      # shown after the follow-up item; the rest go to Guidance.additional
 
 
 class RiskCategory(Enum):
@@ -45,9 +50,11 @@ class Category(Enum):
     GENERAL = "General health information"
     BLOOD_PRESSURE = "Blood pressure"
     CHOLESTEROL = "Cholesterol"
-    BLOOD_SUGAR = "Blood sugar"
-    EXERCISE = "Exercise-related indicators"
+    GLUCOSE = "Glucose"
+    SMOKING = "Smoking"
+    WEIGHT = "Body weight (BMI)"
     ACTIVITY = "Physical activity"
+    ALCOHOL = "Alcohol"
     MODEL_CONTEXT = "Model explanation context"
 
 
@@ -64,7 +71,8 @@ class Recommendation:
 class Guidance:
     risk_category: RiskCategory
     probability_positive: float
-    recommendations: list[Recommendation]  # sorted by priority; model context last
+    recommendations: list[Recommendation]  # follow-up, top input items by priority, model context last
+    additional: list[Recommendation] = field(default_factory=list)  # further triggered items, not dropped
     disclaimer: str = DISCLAIMER
 
 
@@ -81,8 +89,8 @@ def _follow_up(category: RiskCategory, p: float) -> Recommendation:
     if category is RiskCategory.HIGHER:
         return Recommendation(
             Category.FOLLOW_UP, "Consider a professional evaluation",
-            "The model estimates a higher probability for these inputs, based on patterns in a historical "
-            "research dataset. This is an estimate, not a medical finding. Consider discussing these results "
+            "The model estimates a higher probability for these inputs, based on patterns in a research "
+            "dataset. This is an estimate, not a medical finding. Consider discussing these results "
             "with a qualified healthcare professional.", Priority.HIGH, reason)
     if category is RiskCategory.MODERATE:
         return Recommendation(
@@ -98,40 +106,56 @@ def _follow_up(category: RiskCategory, p: float) -> Recommendation:
 
 
 def _input_rules(patient: PatientInput) -> list[Recommendation]:
+    """One `if` per rule, in tie-break order. Uses only fields of the current schema."""
     recs = []
-    if patient.trestbps >= BP_TRIGGER:
+    if patient.ap_hi >= SYSTOLIC_TRIGGER or patient.ap_lo >= DIASTOLIC_TRIGGER:
         recs.append(Recommendation(
             Category.BLOOD_PRESSURE, "Review your blood pressure readings",
-            f"The reported resting blood pressure ({patient.trestbps:g} mm Hg) is at or above the "
-            f"{BP_TRIGGER} mm Hg level this prototype uses as a prompt. Consider discussing your blood "
-            "pressure readings with a qualified healthcare professional.",
-            Priority.MODERATE, f"trestbps = {patient.trestbps:g} >= {BP_TRIGGER}"))
-    if patient.chol >= CHOL_TRIGGER:
+            f"The reported blood pressure ({patient.ap_hi:g}/{patient.ap_lo:g} mm Hg) is at or above the "
+            f"{SYSTOLIC_TRIGGER}/{DIASTOLIC_TRIGGER} mm Hg level this prototype uses as a prompt. A single "
+            "reading says little on its own; consider discussing your blood pressure with a qualified "
+            "healthcare professional.",
+            Priority.MODERATE, f"ap_hi = {patient.ap_hi:g}, ap_lo = {patient.ap_lo:g}"))
+    if patient.cholesterol >= 2:
+        level = CATEGORY_LABELS["cholesterol"][patient.cholesterol].lower()
         recs.append(Recommendation(
             Category.CHOLESTEROL, "Discuss your cholesterol level",
-            f"The reported cholesterol ({patient.chol:g} mg/dl) is at or above the {CHOL_TRIGGER} mg/dl "
-            "level this prototype uses as a prompt. Consider discussing cholesterol and other "
+            f"Cholesterol was reported as {level}. Consider discussing cholesterol and other "
             "cardiovascular risk factors with a qualified healthcare professional.",
-            Priority.MODERATE, f"chol = {patient.chol:g} >= {CHOL_TRIGGER}"))
-    if patient.fbs == 1:
+            Priority.MODERATE, f"cholesterol = {patient.cholesterol} ({level})"))
+    if patient.gluc >= 2:
+        level = CATEGORY_LABELS["gluc"][patient.gluc].lower()
         recs.append(Recommendation(
-            Category.BLOOD_SUGAR, "Discuss your blood sugar reading",
-            "Fasting blood sugar above 120 mg/dl was reported. Consider discussing blood sugar results "
-            "with a qualified healthcare professional.", Priority.MODERATE, "fbs = 1 (> 120 mg/dl)"))
-    if patient.exang == 1:
+            Category.GLUCOSE, "Discuss your glucose level",
+            f"Glucose was reported as {level}. Consider discussing glucose results with a qualified "
+            "healthcare professional.", Priority.MODERATE, f"gluc = {patient.gluc} ({level})"))
+    if patient.smoke == 1:
         recs.append(Recommendation(
-            Category.EXERCISE, "Discuss chest pain during exercise",
-            "Exercise-induced angina was reported. Chest discomfort during exertion is worth discussing "
-            "with a qualified healthcare professional, especially before starting or changing an "
-            "exercise routine. Seek prompt medical help for severe or sudden chest pain.",
-            Priority.HIGH, "exang = 1"))
-    else:
-        # Activity advice only when no exercise-related symptom is reported.
+            Category.SMOKING, "Consider support to stop smoking",
+            "Smoking was reported. Not smoking is widely recommended for heart and general health, and a "
+            "healthcare professional can discuss support options.", Priority.MODERATE, "smoke = 1"))
+    if not BMI_LOW <= patient.bmi < BMI_HIGH:
         recs.append(Recommendation(
-            Category.ACTIVITY, "Stay physically active",
+            Category.WEIGHT, "Discuss your weight",
+            f"Your height and weight give a BMI of {patient.bmi:.1f}, outside the {BMI_LOW}-{BMI_HIGH} range "
+            "this prototype uses as a prompt. BMI is a rough measure; a healthcare professional can advise "
+            "what is appropriate for you.", Priority.LOW, f"BMI = {patient.bmi:.1f}"))
+    if patient.active == 0:
+        recs.append(Recommendation(
+            Category.ACTIVITY, "Consider regular physical activity",
             "Regular physical activity is generally beneficial for heart health. A healthcare "
             "professional can advise what type and amount of activity suits you.",
-            Priority.LOW, "exang = 0"))
+            Priority.LOW, "active = 0"))
+    else:
+        recs.append(Recommendation(
+            Category.ACTIVITY, "Keep up your physical activity",
+            "Regular physical activity was reported, which is generally beneficial for heart health.",
+            Priority.LOW, "active = 1"))
+    if patient.alco == 1:
+        recs.append(Recommendation(
+            Category.ALCOHOL, "Consider your alcohol intake",
+            "Alcohol intake was reported. Consider discussing your alcohol intake with a qualified "
+            "healthcare professional.", Priority.LOW, "alco = 1"))
     return recs
 
 
@@ -141,7 +165,7 @@ def _model_context(explanation: LocalExplanation) -> Recommendation:
     return Recommendation(
         Category.MODEL_CONTEXT, "What the model weighed most",
         f"The model placed the most weight on {top.label} ({top.display_value}), which moved its estimate "
-        f"{toward}. This describes how the model works, not a medical cause.",
+        f"{toward}. This describes how the model weighted the inputs, not a medical cause.",
         Priority.INFO, f"Largest SHAP contribution: {top.feature} ({top.shap_value:+.3f} log-odds)")
 
 
@@ -152,12 +176,12 @@ def generate(patient: PatientInput, prediction: PredictionResult,
     if prediction.inputs != asdict(patient):
         raise ValueError("prediction does not belong to this patient input.")
     category = risk_category(prediction.probability_positive)
-    recs = [_follow_up(category, prediction.probability_positive), *_input_rules(patient)]
     order = list(Priority)
-    recs.sort(key=lambda r: order.index(r.priority))  # stable: rule order kept within a priority
+    items = sorted(_input_rules(patient), key=lambda r: order.index(r.priority))  # stable within a priority
+    shown = [_follow_up(category, prediction.probability_positive), *items[:MAX_INPUT_ITEMS]]
     if explanation is not None:
-        recs.append(_model_context(explanation))
-    return Guidance(category, prediction.probability_positive, recs)
+        shown.append(_model_context(explanation))
+    return Guidance(category, prediction.probability_positive, shown, items[MAX_INPUT_ITEMS:])
 
 
 if __name__ == "__main__":
@@ -172,3 +196,5 @@ if __name__ == "__main__":
         for r in g.recommendations:
             print(f"  [{r.priority.value:<8}] {r.category.value}: {r.title}\n             {r.message}\n"
                   f"             reason: {r.reason}")
+        for r in g.additional:
+            print(f"  (more) [{r.priority.value}] {r.category.value}: {r.title} - reason: {r.reason}")

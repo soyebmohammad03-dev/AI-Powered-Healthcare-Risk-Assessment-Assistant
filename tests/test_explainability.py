@@ -8,7 +8,7 @@ from src.data_loader import ROOT, load_dataset, split
 from src.explainability import NEGATIVE, NEUTRAL, POSITIVE, ModelExplainer
 from src.prediction import (DEMO_INPUTS, FINAL_MODEL_PATH, InvalidInputError, ModelArtifactError,
                             PatientInput, load_model, predict)
-from src.preprocessing import CATEGORY_LABELS, FEATURE_LABELS, FEATURES
+from src.preprocessing import CATEGORY_LABELS, FEATURE_LABELS, MODEL_FEATURES
 
 VALID = asdict(DEMO_INPUTS["Example Patient B"])
 
@@ -28,8 +28,8 @@ def explainer(bundle):
 
 def test_explainer_initializes_on_persisted_model(explainer, bundle):
     assert explainer.pipeline is bundle["pipeline"]
-    assert len(explainer.owners) == len(explainer.pre.get_feature_names_out()) == 22
-    assert set(explainer.owners) == set(FEATURES)
+    assert len(explainer.owners) == len(explainer.pre[-1].get_feature_names_out()) == 14
+    assert set(explainer.owners) == set(MODEL_FEATURES)
     assert math.isfinite(explainer.base_value)
 
 
@@ -37,8 +37,8 @@ def test_explainer_initializes_on_persisted_model(explainer, bundle):
 def test_local_explanation_is_consistent_with_prediction(explainer, bundle, label):
     patient = DEMO_INPUTS[label]
     e, p = explainer.explain(patient), predict(patient, bundle)
-    assert len(e.contributions) == len(FEATURES)
-    assert {c.feature for c in e.contributions} == set(FEATURES)
+    assert len(e.contributions) == len(MODEL_FEATURES)
+    assert {c.feature for c in e.contributions} == set(MODEL_FEATURES)
     # Additivity: base + contributions == the classifier's own log-odds, and its sigmoid == predict()
     assert e.base_value + sum(c.shap_value for c in e.contributions) == pytest.approx(e.model_output)
     assert e.model_output == pytest.approx(bundle["pipeline"].decision_function(patient.to_frame())[0])
@@ -54,17 +54,22 @@ def test_shap_values_match_closed_form(explainer, bundle):
     background = pre.transform(split(load_dataset())[0])
     patient = DEMO_INPUTS["Example Patient C"]
     per_column = clf.coef_[0] * (pre.transform(patient.to_frame())[0] - background.mean(axis=0))
-    expected = {f: per_column[[o == f for o in explainer.owners]].sum() for f in FEATURES}
+    expected = {f: per_column[[o == f for o in explainer.owners]].sum() for f in MODEL_FEATURES}
     got = {c.feature: c.shap_value for c in explainer.explain(patient).contributions}
     assert got == pytest.approx(expected)
     assert explainer.base_value == pytest.approx(clf.intercept_[0] + clf.coef_[0] @ background.mean(axis=0))
 
 
+def test_bmi_explained_instead_of_height_and_weight(explainer):
+    features = {c.feature for c in explainer.explain(DEMO_INPUTS["Example Patient C"]).contributions}
+    assert "bmi" in features and not {"height", "weight"} & features
+
+
 def test_readable_names_values_and_wording(explainer):
     patient = DEMO_INPUTS["Example Patient C"]
     for c in explainer.explain(patient).contributions:
-        assert c.label == FEATURE_LABELS[c.feature]
-        assert c.value == getattr(patient, c.feature)
+        assert c.label == FEATURE_LABELS[c.feature] and "__" not in c.label
+        assert c.value == pytest.approx(getattr(patient, c.feature))  # bmi: derived from height/weight
         if c.feature in CATEGORY_LABELS:
             assert c.display_value == CATEGORY_LABELS[c.feature][int(c.value)]
         assert c.direction == (POSITIVE if c.shap_value > 0 else NEGATIVE if c.shap_value < 0 else NEUTRAL)
@@ -78,7 +83,7 @@ def test_local_explanation_is_deterministic(explainer, bundle):
 
 def test_global_importance(explainer):
     ranked = explainer.global_importance()
-    assert [g.feature for g in ranked] and {g.feature for g in ranked} == set(FEATURES)
+    assert {g.feature for g in ranked} == set(MODEL_FEATURES)
     values = [g.mean_abs_shap for g in ranked]
     assert all(math.isfinite(v) and v >= 0 for v in values)
     assert values == sorted(values, reverse=True)
@@ -87,8 +92,8 @@ def test_global_importance(explainer):
 
 
 def test_invalid_input_rejected_same_as_prediction(explainer):
-    with pytest.raises(InvalidInputError, match="cp"):
-        explainer.explain(PatientInput(**{**VALID, "cp": 9}))
+    with pytest.raises(InvalidInputError, match="Cholesterol"):
+        explainer.explain(PatientInput(**{**VALID, "cholesterol": 9}))
     with pytest.raises(TypeError):
         explainer.explain(VALID)  # raw dict bypasses validation, so it is refused
 

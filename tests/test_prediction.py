@@ -37,6 +37,7 @@ def test_valid_prediction(bundle, label):
     assert r.probability_positive + r.probability_negative == pytest.approx(1.0)
     assert r.predicted_class == int(r.probability_positive >= 0.5)
     assert r.inputs == asdict(DEMO_INPUTS[label])
+    assert r.bmi == pytest.approx(DEMO_INPUTS[label].weight / (DEMO_INPUTS[label].height / 100) ** 2)
 
 
 def test_prediction_is_deterministic(bundle):
@@ -62,8 +63,7 @@ def test_persisted_model_is_the_evaluated_model(bundle):
 
 
 def test_inference_preprocessing_equals_training_preprocessing(bundle):
-    df = load_dataset()
-    X_train, X_test, _, _ = split(df)
+    X_train, X_test, _, _ = split(load_dataset())
     fresh = build_preprocessor().fit(X_train)
     np.testing.assert_array_equal(fresh.transform(X_test), bundle["pipeline"].named_steps["pre"].transform(X_test))
 
@@ -75,24 +75,33 @@ def test_saved_model_works_in_fresh_process(bundle):
 
 
 @pytest.mark.parametrize("field, value, message", [
-    ("cp", 9, "not a valid code"),
-    ("thal", 4, "not a valid code"),
-    ("sex", 0.5, "whole number"),
-    ("chol", 5000, "outside the accepted range"),
-    ("age", -3, "outside the accepted range"),
-    ("trestbps", "120", "expected a number"),
-    ("oldpeak", float("nan"), "expected a number"),
-    ("exang", True, "expected a number"),
-    ("ca", None, "required"),
+    ("gender", 3, "Gender: 3 is not a valid code"),
+    ("cholesterol", 4, "not a valid code"),
+    ("smoke", 0.5, "not a valid code"),
+    ("ap_hi", 300, "Systolic blood pressure: 300 is outside the accepted range"),
+    ("ap_lo", 10, "outside the accepted range"),
+    ("age", 70, "outside the accepted range"),       # beyond the dataset's age coverage
+    ("height", 55, "outside the accepted range"),
+    ("height", "170", "expected a number"),
+    ("weight", float("nan"), "expected a number"),
+    ("active", True, "expected a number"),
+    ("ap_lo", None, "required"),
 ])
 def test_invalid_values_rejected(field, value, message):
     with pytest.raises(InvalidInputError, match=message):
         PatientInput(**{**VALID, field: value})
 
 
+def test_cross_field_checks():
+    with pytest.raises(InvalidInputError, match="Systolic blood pressure must be higher"):
+        PatientInput(**{**VALID, "ap_hi": 120, "ap_lo": 120})
+    with pytest.raises(InvalidInputError, match="BMI of 173.6"):
+        PatientInput(**{**VALID, "height": 120, "weight": 250})
+
+
 def test_missing_and_unknown_fields_rejected():
-    data = {k: v for k, v in VALID.items() if k != "chol"}
-    with pytest.raises(InvalidInputError, match="chol: value is required"):
+    data = {k: v for k, v in VALID.items() if k != "gluc"}
+    with pytest.raises(InvalidInputError, match="Glucose: value is required"):
         PatientInput.from_dict(data)
     with pytest.raises(InvalidInputError, match="bmi: unknown field"):
         PatientInput.from_dict({**VALID, "bmi": 25})
@@ -100,7 +109,7 @@ def test_missing_and_unknown_fields_rejected():
 
 def test_all_errors_reported_together():
     with pytest.raises(InvalidInputError) as exc:
-        PatientInput(**{**VALID, "cp": 9, "chol": 5000})
+        PatientInput(**{**VALID, "gender": 9, "ap_hi": 500})
     assert len(exc.value.errors) == 2
 
 

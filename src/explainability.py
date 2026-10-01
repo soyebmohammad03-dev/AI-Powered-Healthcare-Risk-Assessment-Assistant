@@ -19,7 +19,7 @@ from sklearn.linear_model import LogisticRegression
 
 from src.data_loader import load_dataset, split
 from src.prediction import ModelArtifactError, PatientInput, default_model
-from src.preprocessing import CATEGORICAL, CATEGORY_LABELS, FEATURE_LABELS, FEATURES, NUMERIC
+from src.preprocessing import CATEGORICAL, CATEGORY_LABELS, FEATURE_LABELS, FEATURES, MODEL_FEATURES, NUMERIC
 
 POSITIVE = "toward_positive"   # pushes toward target 1 (dataset label: disease present)
 NEGATIVE = "toward_negative"
@@ -28,10 +28,10 @@ NEUTRAL = "neutral"            # exactly zero: the input equals the background m
 
 @dataclass(frozen=True)
 class FeatureContribution:
-    feature: str                # internal name, e.g. "chol"
-    label: str                  # readable name, e.g. "Cholesterol"
-    value: float                # the patient's original (untransformed) input
-    display_value: str          # e.g. "245" or "Asymptomatic"
+    feature: str                # internal name, e.g. "ap_hi" (one of MODEL_FEATURES)
+    label: str                  # readable name, e.g. "Systolic blood pressure"
+    value: float                # the patient's untransformed value (BMI: derived from height/weight)
+    display_value: str          # e.g. "140", "27.8" or "Above normal"
     shap_value: float           # log-odds contribution; sum of the feature's encoded columns
     direction: str              # POSITIVE, NEGATIVE or NEUTRAL
     relative_importance: float  # |shap_value| / sum of all |shap_value|; sums to 1 across features
@@ -60,12 +60,12 @@ def _column_owners(pipeline) -> list[str]:
     Numeric features map 1:1. A categorical feature owns one column per one-hot category,
     minus the dropped column for binary features (drop="if_binary").
     """
-    pre = pipeline.named_steps["pre"]
-    ohe = pre.named_transformers_["cat"][-1]
+    encoder = pipeline.named_steps["pre"][-1]  # the ColumnTransformer after BMI derivation
+    ohe = encoder.named_transformers_["cat"]
     owners = list(NUMERIC)
     for feature, cats, dropped in zip(CATEGORICAL, ohe.categories_, ohe.drop_idx_):
         owners += [feature] * (len(cats) - (dropped is not None))
-    names = pre.get_feature_names_out()
+    names = encoder.get_feature_names_out()
     if len(owners) != len(names) or not all(
             n == f"num__{o}" or n.startswith(f"cat__{o}_") for n, o in zip(names, owners)):
         raise ModelArtifactError("Preprocessed columns do not match the expected feature layout.")
@@ -75,13 +75,14 @@ def _column_owners(pipeline) -> list[str]:
 def _display(feature: str, value: float) -> str:
     if feature in CATEGORY_LABELS:
         return CATEGORY_LABELS[feature][int(value)]
-    return f"{value:g}"
+    return f"{value:.1f}" if feature == "bmi" else f"{value:g}"
 
 
 class ModelExplainer:
     """Wraps shap.LinearExplainer for the final pipeline's classifier.
 
-    The explainer works on the preprocessed columns (the classifier's real inputs), using the
+    The explainer works on the preprocessed columns (the classifier's real inputs: BMI derived,
+    numerics scaled, categoricals one-hot encoded; height and weight enter only through BMI), using the
     preprocessed training split as background with an Independent masker. For a linear model this
     gives exact SHAP values: coef_j * (x_j - mean_j). Contributions of a categorical feature's
     one-hot columns are then summed back to that one feature (valid because SHAP values are additive).
@@ -101,11 +102,12 @@ class ModelExplainer:
         self.base_value = float(np.ravel(self._shap.expected_value)[0])
 
     def _grouped_shap(self, X: pd.DataFrame) -> np.ndarray:
-        """SHAP values per original feature: shape (rows, len(FEATURES)), columns in FEATURES order."""
-        values = np.asarray(self._shap.shap_values(self.pre.transform(X)))
-        grouped = np.zeros((values.shape[0], len(FEATURES)))
+        """SHAP values per model feature: shape (rows, len(MODEL_FEATURES)), in MODEL_FEATURES order.
+        X holds raw FEATURES; the persisted preprocessing derives BMI and encodes."""
+        values = np.asarray(self._shap.shap_values(self.pre.transform(X[FEATURES])))
+        grouped = np.zeros((values.shape[0], len(MODEL_FEATURES)))
         for col, owner in enumerate(self.owners):
-            grouped[:, FEATURES.index(owner)] += values[:, col]
+            grouped[:, MODEL_FEATURES.index(owner)] += values[:, col]
         return grouped
 
     def explain(self, patient: PatientInput) -> LocalExplanation:
@@ -115,8 +117,8 @@ class ModelExplainer:
         shap_row = self._grouped_shap(X)[0]
         total = float(np.abs(shap_row).sum()) or 1.0
         contributions = []
-        for feature, s in zip(FEATURES, shap_row):
-            label, value = FEATURE_LABELS[feature], float(getattr(patient, feature))
+        for feature, s in zip(MODEL_FEATURES, shap_row):
+            label, value = FEATURE_LABELS[feature], float(getattr(patient, feature))  # bmi: PatientInput.bmi
             direction = POSITIVE if s > 0 else NEGATIVE if s < 0 else NEUTRAL
             display = _display(feature, value)
             shown = f"{label} ({display})"
@@ -135,10 +137,10 @@ class ModelExplainer:
                                 contributions=contributions)
 
     def global_importance(self, X: pd.DataFrame | None = None) -> list[GlobalImportance]:
-        """Mean |SHAP| per feature, ranked. Defaults to all 303 dataset records."""
-        X = load_dataset()[FEATURES] if X is None else X
+        """Mean |SHAP| per model feature, ranked. Defaults to every record of the cleaned dataset."""
+        X = load_dataset() if X is None else X
         mean_abs = np.abs(self._grouped_shap(X)).mean(axis=0)
-        ranked = sorted(zip(FEATURES, mean_abs), key=lambda t: t[1], reverse=True)
+        ranked = sorted(zip(MODEL_FEATURES, mean_abs), key=lambda t: t[1], reverse=True)
         return [GlobalImportance(f, FEATURE_LABELS[f], float(v), float(v / mean_abs.sum())) for f, v in ranked]
 
 
@@ -162,7 +164,7 @@ if __name__ == "__main__":
         print(f"\n{name}: P(pos) predict={p.probability_positive:.4f} shap={e.probability_positive:.4f} "
               f"log-odds={e.model_output:+.3f}")
         for c in e.contributions[:5]:
-            print(f"  {c.label:<40}{c.display_value:>24}  {c.shap_value:+.3f}  {c.relative_importance:5.1%}")
-    print("\nGlobal importance (mean |SHAP|, log-odds, all 303 records):")
+            print(f"  {c.label:<32}{c.display_value:>18}  {c.shap_value:+.3f}  {c.relative_importance:5.1%}")
+    print("\nGlobal importance (mean |SHAP|, log-odds, all cleaned records):")
     for i, g in enumerate(explainer.global_importance(), 1):
-        print(f"  {i:>2}. {g.label:<40}{g.mean_abs_shap:.3f}  {g.relative_importance:5.1%}")
+        print(f"  {i:>2}. {g.label:<32}{g.mean_abs_shap:.3f}  {g.relative_importance:5.1%}")

@@ -3,221 +3,190 @@
 Academic project for **Design of Artificial Intelligence Products** (B.Tech).
 Theme: Healthcare + Human-Centered AI + Explainable AI.
 
-> **Medical disclaimer:** This is an educational AI decision-support prototype. It does **not** diagnose heart disease, prescribe treatment, or replace a doctor, and it is not medical advice. Its outputs come from a model trained on a small historical research dataset and are not clinically validated.
+> **Medical disclaimer:** This is an educational AI decision-support prototype. It does **not** diagnose cardiovascular disease, prescribe treatment, or replace a doctor, and it is not medical advice. Its outputs come from a model trained on a public research dataset and are **not clinically validated**. A larger dataset does not make it clinically validated either.
 
 ## Status
 
 | Phase | Scope | Status |
 |---|---|---|
-| 1 | Dataset acquisition, inspection, preprocessing, baseline training & evaluation | Done |
+| 1 | Dataset, preprocessing, three-model comparison | Done (migrated to the Cardiovascular Disease dataset) |
 | 2 | Model selection, persistence, prediction pipeline | Done |
 | 3 | SHAP explainability | Done |
 | 4 | Rule-based informational guidance | Done |
 | 5 | Streamlit application | Planned |
 | 6 | Integration, testing, demo preparation | Planned |
 
-## Dataset
-
-**UCI Heart Disease, Cleveland subset** (`processed.cleveland.data`)
-Source: https://archive.ics.uci.edu/dataset/45/heart+disease (Janosi, Steinbrunn, Pfisterer, Detrano, 1988), licensed CC BY 4.0.
-
-The file is included in `data/` (18 KB). `src/data_loader.py` re-downloads it if it is missing and checks its SHA-256 hash.
-
-- **Records:** 303
-- **Target:** the original `num` column (0–4) is binarized as `target = 1` when `num > 0` (disease present) and `0` otherwise. This is the presence/absence task described in the dataset documentation. Class counts: 164 absent, 139 present.
-- **Missing values:** 6 values are recorded as `?`: 4 in `ca` and 2 in `thal`. They are imputed inside the model pipeline, fitted on training data only.
-
-| Feature | Type | Meaning |
-|---|---|---|
-| age | numeric | Age in years |
-| trestbps | numeric | Resting blood pressure (mm Hg) |
-| chol | numeric | Serum cholesterol (mg/dl) |
-| thalach | numeric | Maximum heart rate achieved |
-| oldpeak | numeric | ST depression induced by exercise relative to rest |
-| ca | numeric (ordinal 0–3) | Number of major vessels coloured by fluoroscopy |
-| sex | categorical | 0 = female, 1 = male |
-| cp | categorical | Chest pain: 1 typical angina, 2 atypical angina, 3 non-anginal, 4 asymptomatic |
-| fbs | categorical | Fasting blood sugar > 120 mg/dl (1 = true) |
-| restecg | categorical | Resting ECG: 0 normal, 1 ST-T abnormality, 2 LV hypertrophy |
-| exang | categorical | Exercise-induced angina (1 = yes) |
-| slope | categorical | Slope of peak exercise ST segment: 1 up, 2 flat, 3 down |
-| thal | categorical | Thallium test: 3 normal, 6 fixed defect, 7 reversible defect |
-
-## Method (Phase 1)
-
-- **Split:** stratified 80/20 train/test split (242 / 61 records), seed 42. The test set is held out.
-- **Validation:** stratified 5-fold cross-validation on the training set.
-- **Preprocessing** (`src/preprocessing.py`): numeric features use median imputation and standard scaling. Categorical features use most-frequent imputation and one-hot encoding over the documented category codes. Any undocumented code raises an error.
-- **Models:** Logistic Regression, Random Forest and XGBoost, each in a single `Pipeline` with the preprocessor.
-
-## Results (measured, seed 42)
-
-Produced by `python -m src.train_models`. The full output, including CV standard deviations and confusion matrices, is in `artifacts/metrics.json`.
-
-| Model | Split | Accuracy | Precision | Recall | F1 | ROC-AUC |
-|---|---|---|---|---|---|---|
-| Logistic Regression | 5-fold CV | 0.839 | 0.877 | 0.766 | 0.814 | 0.907 |
-| | Test | 0.869 | 0.812 | 0.929 | 0.867 | 0.958 |
-| Random Forest | 5-fold CV | 0.826 | 0.831 | 0.783 | 0.802 | 0.895 |
-| | Test | 0.885 | 0.839 | 0.929 | 0.881 | 0.948 |
-| XGBoost | 5-fold CV | 0.806 | 0.805 | 0.765 | 0.782 | 0.867 |
-| | Test | 0.918 | 0.871 | 0.964 | 0.915 | 0.947 |
-
-The test set has only 61 records, so one prediction changes accuracy by about 1.6 points. Model selection therefore relies on the cross-validation scores, not on the test scores.
-
-## Final model: Logistic Regression
-
-Logistic Regression is the prototype model because:
-
-- It has the best 5-fold cross-validation ROC-AUC (0.907), accuracy, precision and F1 of the three models.
-- Its predictions are a weighted sum of the inputs, so it is the easiest to explain, which matters most for this explainable-AI product.
-
-XGBoost has the highest test accuracy. That score comes from a single 61-record split, and XGBoost has the lowest cross-validation scores, so it was not chosen on that basis.
-
-The other two models are still saved to `models/` and reported in `artifacts/metrics.json` as evaluation artifacts.
-
-## Prediction pipeline
-
-```
-PatientInput (validated dataclass)
-      │  to_frame(): one row, columns named explicitly
-      ▼
-models/final_model.joblib ── Pipeline[ preprocessor → LogisticRegression ]
-      │  predict_proba
-      ▼
-PredictionResult(predicted_class, probability_positive, probability_negative, model_name, inputs)
-```
-
-- **Persistence:** `models/final_model.joblib` is a dictionary holding:
-  - the whole fitted scikit-learn `Pipeline` (imputers, scaler, one-hot encoder and classifier);
-  - the feature list and category codes it was trained with;
-  - its test metrics and the library versions.
-
-  The preprocessing and the model are saved as one object, so a different preprocessor cannot be paired with the model by mistake. This is the same pipeline object that was scored on the test set, and a test checks that.
-- **Training and inference:** `src/train_models.py` fits the pipeline on the training split and saves it. `src/prediction.py` only loads and applies it, and never retrains.
-- **Artifact checks:** `load_model()` raises `ModelArtifactError` and tells you how to fix it if the file is missing or corrupted, has no preprocessing step, or was built for a different feature list.
-- **Output:** `predicted_class` uses the default 0.5 threshold and refers to the dataset target: 1 = disease present, according to the 1988 angiography label. This is raw model output. Any user-facing risk wording added later will be prototype bands, not clinical thresholds.
-
-### Input contract (`PatientInput`)
-
-- All 13 features are required. The model never receives a missing value; if a test result is unknown, the input is rejected.
-- Values must be numbers. Strings, booleans and NaN are rejected.
-- Categorical fields and `ca` must be whole numbers, and categorical fields must be one of the documented codes listed in the dataset table above.
-- Numeric fields must fall within sanity bounds:
-
-  | Field | Bounds |
-  |---|---|
-  | age | 18–100 |
-  | trestbps | 80–220 |
-  | chol | 100–600 |
-  | thalach | 60–220 |
-  | oldpeak | 0–7 |
-  | ca | 0–3 |
-
-  These bounds catch typos and impossible values. They are **not** clinical limits.
-- Every problem found is reported together in an `InvalidInputError`, which has one readable message per field in `.errors`.
-
-### Predict from Python
-
-```python
-from src.prediction import PatientInput, predict, DEMO_INPUTS
-
-patient = PatientInput(age=56, sex=1, cp=2, trestbps=134, chol=245, fbs=0, restecg=2,
-                       thalach=148, exang=0, oldpeak=1.2, slope=2, ca=1, thal=3)
-result = predict(patient)            # or PatientInput.from_dict({...})
-print(result.probability_positive)
-```
-
-`DEMO_INPUTS` contains three **synthetic** example inputs (A, B, C). They are written by hand and are not real patients or rows from the dataset; their predictions are always computed by the model.
-
-To check the saved artifact and score the demo inputs:
-
-```bash
-python -m src.prediction
-```
-
-To explain the demo inputs and print global importance:
-
-```bash
-python -m src.explainability
-```
-
-To generate guidance for the demo inputs:
-
-```bash
-python -m src.recommendations
-```
-
-## Explainable AI (SHAP)
-
-A **prediction** answers "what does the model estimate for this input?". An **explanation** answers "which inputs moved that estimate, and by how much?". `src/prediction.py` produces the prediction, and `src/explainability.py` explains it. The two modules are separate, but they use the same saved model and the same `PatientInput` validation.
-
-**SHAP** (SHapley Additive exPlanations) splits one prediction into one contribution per feature. It is based on Shapley values from game theory. SHAP values are additive:
-
-```
-base value + sum of all feature contributions = model output
-```
-
-- **Explainer:** `shap.LinearExplainer` is SHAP's explainer for linear models. It is exact and fast. For each preprocessed column it computes `coefficient × (patient value − average training value)`.
-- **Background:** the explainer's reference data is the 242 preprocessed training records, all of them, with no subsampling.
-- **Units:** the values are in **log-odds**, which is what logistic regression computes before converting to a probability. They are not percentages. The base value is −0.071 log-odds: the model's output at the average training record, which converts to a probability of 0.482. Converting `base + Σ contributions` to a probability gives exactly the probability returned by `predict()`.
-- **Local explanation:** `explain(patient)` returns a `LocalExplanation`. It contains one `FeatureContribution` per original feature, sorted from largest effect to smallest. Each contribution has:
-  - the readable label and the patient's input value;
-  - the SHAP value;
-  - its direction (`toward_positive`, `toward_negative` or `neutral`);
-  - its share of the total effect;
-  - a careful sentence describing it.
-- **Global explanation:** `default_explainer().global_importance()` ranks the features by mean |SHAP| across all 303 records.
-- **Readable feature names:** preprocessing turns the 13 features into 22 columns, because one-hot encoding splits each categorical feature into several columns. For each feature, the explainer reads from the fitted encoder how many columns it produced, and checks this against the column names. It then **adds up** each feature's column contributions. Adding is valid because SHAP values are additive, so "Chest pain type" is shown as one contribution, not four encoded columns. Readable labels come from `FEATURE_LABELS` and `CATEGORY_LABELS` in `src/preprocessing.py`.
-
-Global importance of the final model (mean |SHAP|, log-odds, all 303 records, from `python -m src.explainability`):
-
-| Rank | Feature | Mean \|SHAP\| | Share |
-|---|---|---|---|
-| 1 | Major vessels coloured by fluoroscopy (`ca`) | 0.985 | 20.7% |
-| 2 | Thallium stress test (`thal`) | 0.651 | 13.7% |
-| 3 | Chest pain type (`cp`) | 0.637 | 13.4% |
-| 4 | Sex | 0.560 | 11.8% |
-| 5 | Slope of peak exercise ST segment | 0.508 | 10.7% |
-| 6 | Maximum heart rate | 0.289 | 6.1% |
-| 7 | Resting blood pressure | 0.255 | 5.4% |
-| 8 | Exercise-induced angina | 0.239 | 5.0% |
-| 9 | Resting ECG | 0.198 | 4.2% |
-| 10 | ST depression | 0.170 | 3.6% |
-| 11 | Cholesterol | 0.133 | 2.8% |
-| 12 | Age | 0.076 | 1.6% |
-| 13 | Fasting blood sugar | 0.050 | 1.1% |
-
-```python
-from src.explainability import explain, default_explainer
-from src.prediction import DEMO_INPUTS
-
-e = explain(DEMO_INPUTS["Example Patient C"])
-for c in e.contributions[:3]:
-    print(c.label, c.display_value, round(c.shap_value, 3), c.text)
-ranking = default_explainer().global_importance()
-```
-
-**SHAP explains the model, not medicine.** A contribution means the feature moved *this model's* output for this input. It is not evidence that the feature causes disease. Wording used: "Cholesterol (245) contributed toward a higher model-estimated probability for this input". It never says "cholesterol caused…".
-
-## Informational guidance (rule-based)
-
-The system has three separate parts:
-
-| Layer | Module | Question it answers |
-|---|---|---|
-| ML model | `src/prediction.py` | What probability does the model estimate? |
-| SHAP | `src/explainability.py` | Which inputs moved that estimate? |
-| Recommendation engine | `src/recommendations.py` | What general information should be shown alongside it? |
-
 ```
 PatientInput → validation → ML prediction ─┬─ probability → prototype risk band ─┐
                                            └─ SHAP explanation ──────────────────┴→ rule engine → Guidance (+ disclaimer)
 ```
 
-The guidance is generated by **explicit, deterministic rules**, not by a model and not by an LLM. An LLM could invent medical claims, give different wording each run, and cannot be fully checked. Plain `if` rules can be read line by line, tested exhaustively, and explained in a viva.
+| Layer | Module | Question it answers |
+|---|---|---|
+| ML model | `src/prediction.py` | What probability does the model estimate? |
+| SHAP | `src/explainability.py` | How did the model weight these inputs? |
+| Recommendation engine | `src/recommendations.py` | What general information should be shown alongside it? |
 
-**Prototype risk bands.** These are applied to the model's probability for display only. They are **not clinically validated** and do not change the model, which still uses 0.5 for `predicted_class`.
+## Dataset
+
+**Cardiovascular Disease dataset** (Svetlana Ulianova, Kaggle): https://www.kaggle.com/datasets/sulianova/cardiovascular-disease-dataset
+
+`src/data_loader.py` downloads `cardio_train.csv` from Kaggle's public API endpoint, which needs no account. It then checks the file's SHA-256 hash. The file is not committed to this repository; the first run of training or the tests downloads it.
+
+**Raw file as inspected**
+
+| Property | Value |
+|---|---|
+| Delimiter | semicolon |
+| Shape | 70,000 rows × 13 columns |
+| Columns | `id, age, gender, height, weight, ap_hi, ap_lo, cholesterol, gluc, smoke, alco, active, cardio` |
+| Missing values | none |
+| Duplicate ids | none |
+| Records identical apart from `id` | 24 |
+| Target `cardio` | 0 (absent): 35,021 · 1 (present): 34,979 |
+
+The raw file also contains measurement errors:
+- `ap_hi` ranges from −150 to 16,020 and `ap_lo` from −70 to 11,000.
+- 1,234 rows have systolic pressure below diastolic.
+- Heights range from 55 to 250 cm, and weights go as low as 10 kg.
+
+**Cleaning.** These are data-quality rules for removing recording errors. They are not medical thresholds and were not tuned for performance. They are applied in this order:
+
+| Rule | Rows removed |
+|---|---|
+| Malformed, missing or non-numeric values | 0 |
+| Target not 0/1 | 0 |
+| Category code not documented | 0 |
+| Duplicate record (all columns except `id`) | 24 |
+| Age outside 29–65 years | 0 |
+| Height outside 120–220 cm | 53 |
+| Weight outside 30–250 kg | 7 |
+| Systolic `ap_hi` outside 60–250 mm Hg | 226 |
+| Diastolic `ap_lo` outside 30–200 mm Hg | 989 |
+| Systolic not above diastolic | 103 |
+| BMI outside 12–60 (height and weight each plausible, but not together) | 25 |
+| **Clean dataset** | **68,573** records: 0 = 34,646, 1 = 33,927 |
+
+**Features**
+
+| Input | Meaning | Model use |
+|---|---|---|
+| `age` | Age in years (raw file stores days; converted as days / 365.25) | numeric |
+| `gender` | 1 = female, 2 = male (see note below) | categorical |
+| `height`, `weight` | cm, kg | combined into **BMI** = weight / (height in m)² |
+| `ap_hi` | Systolic blood pressure, mm Hg | numeric |
+| `ap_lo` | Diastolic blood pressure, mm Hg | numeric |
+| `cholesterol` | 1 normal, 2 above normal, 3 well above normal | categorical |
+| `gluc` | Glucose: 1 normal, 2 above normal, 3 well above normal | categorical |
+| `smoke`, `alco`, `active` | Self-reported smoking, alcohol intake, physical activity (0/1) | categorical |
+
+- **Gender coding:** the source does not label the two codes. 1 = female is inferred from mean height (161 cm vs 170 cm), which is how this dataset is usually read.
+- **`id`:** dropped during cleaning. It is never a feature.
+
+**Derived features.** BMI is the only one. It is computed inside the saved model pipeline, so training and inference compute it identically. BMI replaces raw height and weight because adding them back changed cross-validation ROC-AUC by at most 0.0002. Pulse pressure (`ap_hi − ap_lo`) is deliberately not added: it is an exact linear combination of two existing features, so it carries no new information, and for a linear model it would split SHAP credit arbitrarily.
+
+## Method
+
+- **Split:** stratified 80/20 train/test split, seed 42: 54,858 train and 13,715 test records. The test set is held out.
+- **Validation:** stratified 5-fold cross-validation on the training set.
+- **Preprocessing** (`src/preprocessing.py`): one `Pipeline` that is fitted on training data only:
+  1. derive BMI;
+  2. standard-scale age, BMI, `ap_hi` and `ap_lo`;
+  3. one-hot encode the categorical codes, where any undocumented code raises an error.
+- **Models:** Logistic Regression, Random Forest and XGBoost, each combined with the preprocessor in one pipeline.
+
+## Results (measured, seed 42)
+
+Produced by `python -m src.train_models`. The full report is in `artifacts/metrics.json`.
+
+| Model | Split | Accuracy | Precision | Recall | F1 | ROC-AUC |
+|---|---|---|---|---|---|---|
+| Logistic Regression | 5-fold CV | 0.728 ± 0.004 | 0.756 | 0.666 | 0.708 | 0.791 ± 0.004 |
+| | Test | 0.728 | 0.755 | 0.665 | 0.707 | 0.793 |
+| Random Forest | 5-fold CV | 0.733 ± 0.004 | 0.764 | 0.667 | 0.712 | 0.800 ± 0.004 |
+| | Test | 0.736 | 0.765 | 0.674 | 0.717 | 0.803 |
+| XGBoost | 5-fold CV | 0.735 ± 0.003 | 0.753 | 0.691 | 0.721 | 0.801 ± 0.004 |
+| | Test | 0.737 | 0.756 | 0.692 | 0.722 | 0.804 |
+
+These scores are typical for this dataset: published work on it generally reports around 0.73 accuracy. The available features are coarse, and some labels and readings are noisy.
+
+## Final model: Logistic Regression
+
+The final model is chosen on cross-validation first. The test set is used only as a consistency check.
+
+- **Performance:** XGBoost and Random Forest lead by about 0.01 ROC-AUC (CV 0.801 and 0.800 versus 0.791) and by under 1 point of accuracy.
+- **Stability:** all three models are equally stable (CV standard deviation ≤ 0.01), and each one's test scores match its CV scores.
+- **Interpretability:** Logistic Regression's effects are monotone and the same for every patient. For example, a higher systolic blood pressure always moves its estimate up. Its SHAP values are exact (`coef × (x − mean)`) and easy to explain. For an explainable decision-support prototype, this outweighs a 1-point AUC gap.
+
+The other models are still saved to `models/` and reported in `artifacts/metrics.json`. The reasoning above is also recorded in `metrics.json` (`final_model_reason`).
+
+## Prediction pipeline
+
+- **Saved artifact:** `models/final_model.joblib` holds the entire fitted pipeline (BMI derivation → scaler and one-hot encoder → classifier). It also stores the input features, the model features, the category codes, the test metrics and the library versions. Training (`src/train_models.py`) writes it; inference (`src/prediction.py`) only loads it and never retrains.
+- **Artifact checks:** `load_model()` raises `ModelArtifactError` with a fix hint if the file is missing, corrupted, has no preprocessing step, or uses a different feature contract.
+- **Input contract:** `PatientInput` requires all 11 inputs.
+  - Values must be numbers. Strings, booleans and NaN are rejected.
+  - Category fields must use one of the documented codes.
+  - Measurements must fall within the cleaning ranges above. Age must also be within the dataset's coverage of 29–65 years, so the model never extrapolates.
+  - Cross-field checks: systolic must be above diastolic, and the resulting BMI must be between 12 and 60.
+  - All problems are reported together as `InvalidInputError.errors`, with readable messages.
+- **Output:** `PredictionResult` contains `predicted_class` (threshold 0.5), `probability_positive`, `probability_negative`, `model_name`, the validated `inputs` and the derived `bmi`. This is raw model output with no wording added.
+
+```python
+from src.prediction import PatientInput, predict
+from src.explainability import explain
+from src.recommendations import generate
+
+patient = PatientInput(age=50, gender=2, height=175, weight=85, ap_hi=130, ap_lo=85,
+                       cholesterol=1, gluc=1, smoke=1, alco=0, active=1)
+result = predict(patient)
+explanation = explain(patient)
+guidance = generate(patient, result, explanation)
+print(result.probability_positive, guidance.risk_category.value)
+```
+
+**Demo inputs.** `DEMO_INPUTS` contains three **synthetic** examples. They are written by hand and are not real patients or rows from the dataset. Every value in the tables below is computed by `python -m src.prediction`, `python -m src.explainability` and `python -m src.recommendations`.
+
+| Demo | Inputs | P(pos) | Band | Largest SHAP contributions (log-odds) |
+|---|---|---|---|---|
+| A | 38 y, female, 165 cm / 60 kg (BMI 22.0), 115/75, all normal, non-smoker, active | 0.143 | Lower | Age −0.76, Systolic BP −0.66, Cholesterol normal −0.17 |
+| B | 50 y, male, 175 cm / 85 kg (BMI 27.8), 130/85, normal levels, smoker, active | 0.451 | Moderate | Systolic BP +0.19, Cholesterol normal −0.17, Age −0.16, Smoking −0.14 |
+| C | 61 y, female, 160 cm / 88 kg (BMI 34.4), 160/100, cholesterol well above, glucose above, inactive | 0.979 | Higher | Systolic BP +1.88, Cholesterol well above +0.89, Age +0.38 |
+
+## Explainable AI (SHAP)
+
+A **prediction** answers "what does the model estimate?". An **explanation** answers "how did the model weight these inputs?". SHAP (SHapley Additive exPlanations), which is based on Shapley values from game theory, splits one prediction into one additive contribution per feature:
+
+```
+base value + sum of all feature contributions = model output
+```
+
+- **Explainer:** `shap.LinearExplainer`, SHAP's exact explainer for linear models. It works on the classifier's real inputs, which are the 14 preprocessed columns. The reference data is all 54,858 preprocessed training records, with no subsampling.
+- **Units:** the values are in **log-odds**, not percentages. The base value is +0.032 log-odds: the model's output at the average training record, which converts to a probability of 0.508. Converting `base + Σ contributions` to a probability gives exactly the probability returned by `predict()`.
+- **Readable feature names:** the explainer reads from the fitted one-hot encoder which columns belong to which feature, and checks this against the column names. It then adds each feature's column contributions together, which is exact because SHAP is additive. So "Cholesterol: Well above normal" appears instead of `cat__cholesterol_3`. Height and weight enter the model only through BMI, so the explanation shows "BMI (from height and weight)".
+- **Local explanation:** `explain(patient)` returns the 10 model features ranked by contribution. Each contribution has its readable label, the patient's value, the SHAP value, a direction, its share of the total and a careful sentence.
+- **Global explanation:** `default_explainer().global_importance()` ranks the features by mean |SHAP| over all 68,573 cleaned records.
+
+| Rank | Feature | Mean \|SHAP\| | Share |
+|---|---|---|---|
+| 1 | Systolic blood pressure | 0.729 | 45.0% |
+| 2 | Age | 0.279 | 17.2% |
+| 3 | Cholesterol | 0.253 | 15.6% |
+| 4 | BMI | 0.115 | 7.1% |
+| 5 | Diastolic blood pressure | 0.073 | 4.5% |
+| 6 | Physical activity | 0.072 | 4.4% |
+| 7 | Glucose | 0.040 | 2.5% |
+| 8 | Smoking | 0.025 | 1.5% |
+| 9 | Alcohol intake | 0.023 | 1.4% |
+| 10 | Gender | 0.014 | 0.8% |
+
+**SHAP explains the model, not medicine.** These values describe how the model weighted the input features. They do not show what causes cardiovascular disease. Generated sentences read "Systolic blood pressure (160) contributed toward a higher model-estimated probability for this input", never "caused".
+
+## Informational guidance (rule-based)
+
+The guidance comes from explicit, deterministic `if` rules on the user's own inputs and on the model's probability band. No model and no LLM is involved. An LLM could produce unsupported medical claims and different text on each run; plain rules can be read, tested exhaustively and explained in a viva. SHAP only adds one clearly labelled "what the model weighed most" note. It never decides what guidance is shown.
+
+**Prototype risk bands.** These are applied to the model's probability for display only. They are **not clinically validated**, and the model is unchanged (it still uses 0.5 for `predicted_class`).
 
 | Probability | Band |
 |---|---|
@@ -225,39 +194,37 @@ The guidance is generated by **explicit, deterministic rules**, not by a model a
 | 0.30 – < 0.60 | Moderate predicted risk |
 | ≥ 0.60 | Higher predicted risk |
 
-**Rules.** The thresholds are prototype triggers. They line up with commonly cited reference points, but they are not diagnostic cut-offs.
+**Rules.** The thresholds are prototype prompts aligned with commonly cited reference points. They are not diagnostic cut-offs.
 
 | Trigger | Item | Priority |
 |---|---|---|
 | Higher band | Consider a professional evaluation | high |
 | Moderate band | Consider discussing these results | moderate |
-| Lower band | General preventive care. Says a lower estimate "does not rule out any health condition" and never says "you are healthy". | low |
-| `trestbps` ≥ 130 mm Hg (the ACC/AHA 2017 elevated/stage-1 systolic range starts at 130) | Review your blood pressure readings | moderate |
-| `chol` ≥ 200 mg/dl (NCEP ATP III "borderline high" starts at 200) | Discuss your cholesterol level | moderate |
-| `fbs` = 1 (> 120 mg/dl) | Discuss your blood sugar reading | moderate |
-| `exang` = 1 | Discuss chest pain during exercise | high |
-| `exang` = 0 | Stay physically active. Only shown when no exercise-related symptom is reported. | low |
-| SHAP explanation given | "What the model weighed most", naming the largest contribution and adding "not a medical cause" | info |
+| Lower band | General preventive care. Says a lower estimate "does not rule out any health condition" and never says "healthy". | low |
+| `ap_hi` ≥ 130 or `ap_lo` ≥ 80 (the ACC/AHA 2017 elevated/stage-1 range begins at 130/80) | Review your blood pressure readings | moderate |
+| `cholesterol` ≥ 2 (dataset category) | Discuss your cholesterol level | moderate |
+| `gluc` ≥ 2 (dataset category) | Discuss your glucose level | moderate |
+| `smoke` = 1 | Consider support to stop smoking | moderate |
+| BMI < 18.5 or ≥ 25 (WHO adult BMI categories) | Discuss your weight | low |
+| `active` = 0 / 1 | Consider regular physical activity / Keep up your physical activity | low |
+| `alco` = 1 | Consider your alcohol intake | low |
+| SHAP explanation given | "What the model weighed most", ending with "…not a medical cause" | info |
 
-Items are sorted by priority, and the model-context item always comes last. A typical result has 3–6 items. Every item carries a `reason` field naming the input or output that triggered it. `DISCLAIMER` is a reusable string for the UI. Tests check every band and trigger combination for prohibited wording, including "diagnosis", "medication", "drug", "caused" and "healthy".
+How the items are arranged:
+- The follow-up item always comes first.
+- After it come up to 3 input items, ranked by priority. Ties keep the rule order in the table.
+- The model-context note always comes last, so a result shows 3–5 items.
+- Any further triggered items are kept in `Guidance.additional`; none are dropped.
+- Every item has a `reason` field naming the input that triggered it.
+- `DISCLAIMER` is a reusable string for the UI.
 
-Guidance for the synthetic demo inputs, generated by `python -m src.recommendations`:
+Guidance for the demo inputs (`python -m src.recommendations`):
 
-| Demo | P(pos) | Band | Items (priority) |
-|---|---|---|---|
-| A | 0.0089 | Lower | Cholesterol 210 (moderate) · General preventive care (low) · Stay active (low) · Model weighed *Sex = Female* most, moving the estimate lower (info) |
-| B | 0.6920 | Higher | Professional evaluation (high) · Blood pressure 134 (moderate) · Cholesterol 245 (moderate) · Stay active (low) · Model weighed *Thallium = Normal* most, moving the estimate lower (info) |
-| C | 0.9968 | Higher | Professional evaluation (high) · Chest pain during exercise (high) · Blood pressure 150 (moderate) · Cholesterol 290 (moderate) · Blood sugar (moderate) · Model weighed *Major vessels = 2* most, moving the estimate higher (info) |
-
-```python
-from src.prediction import DEMO_INPUTS, predict
-from src.explainability import explain
-from src.recommendations import generate
-
-patient = DEMO_INPUTS["Example Patient B"]
-guidance = generate(patient, predict(patient), explain(patient))
-print(guidance.risk_category.value, [r.title for r in guidance.recommendations], guidance.disclaimer)
-```
+| Demo | Items shown | Also in `additional` |
+|---|---|---|
+| A (Lower) | General preventive care · Keep up activity · Model weighed *Age* most, moving the estimate lower | none |
+| B (Moderate) | Discuss these results · Blood pressure 130/85 · Support to stop smoking · Weight (BMI 27.8) · Model weighed *Systolic BP* most, moving the estimate higher | Keep up activity |
+| C (Higher) | Professional evaluation · Blood pressure 160/100 · Cholesterol well above normal · Glucose above normal · Model weighed *Systolic BP* most, moving the estimate higher | Weight (BMI 34.4) · Consider activity |
 
 ## Setup
 
@@ -281,7 +248,21 @@ brew install libomp
 python -m src.train_models
 ```
 
-This regenerates every model artifact. It writes `models/final_model.joblib`, the per-model pipelines `models/{logistic_regression,random_forest,xgboost}.joblib`, and the metrics in `artifacts/metrics.json`. Model files are not committed; run this once after cloning. The seed is fixed, so the results are identical each time.
+This downloads the dataset if needed and trains all three models (about 15 seconds). It writes `models/final_model.joblib`, the per-model pipelines `models/{logistic_regression,random_forest,xgboost}.joblib`, and `artifacts/metrics.json`. Neither the model files nor the dataset are committed; run this once after cloning. The seed is fixed, so the results are identical each time.
+
+## Run the backend from the command line
+
+```bash
+python -m src.prediction
+```
+
+```bash
+python -m src.explainability
+```
+
+```bash
+python -m src.recommendations
+```
 
 ## Test
 
@@ -289,15 +270,17 @@ This regenerates every model artifact. It writes `models/final_model.joblib`, th
 python -m pytest -q
 ```
 
+The tests use the real dataset and the saved model; they download and train once if either is missing.
+
 ## Project structure
 
 ```
 app.py                  Streamlit app (Phase 5)
-data/                   UCI Cleveland data file
+data/                   cardio_train.csv (downloaded, not committed)
 models/                 Trained pipelines, incl. final_model.joblib (generated)
-artifacts/metrics.json  Measured evaluation results
-src/data_loader.py      Download, checksum and load the data; binarize the target
-src/preprocessing.py    Feature lists, category codes, preprocessing pipeline
+artifacts/metrics.json  Measured results, cleaning report, model-selection reasoning
+src/data_loader.py      Download + checksum, cleaning rules, train/test split
+src/preprocessing.py    Feature schema, plausibility ranges, labels, BMI, preprocessing pipeline
 src/evaluate_models.py  Metrics
 src/train_models.py     Training, cross-validation, test evaluation, saving
 src/prediction.py       Input contract, artifact loading/checks, inference, demo inputs
@@ -309,10 +292,12 @@ docs/methodology.md     Methodology notes
 
 ## Limitations
 
-- The dataset is small (303 records), comes from a single centre, dates from 1988, and is 68% male. Results may not generalize to other populations.
-- The input bounds only check that values are plausible. Values outside the training data's observed range (see `src/prediction.py`) are accepted but are extrapolation.
-- The model files are pickles tied to the pinned scikit-learn version; retrain after upgrading it.
-- SHAP explanations describe how this model behaves on this dataset. They do not show causation. With correlated features (for example `thal` and `ca`), credit can be split between them in ways that do not match their clinical meaning. Global importance reflects this 303-record population only.
-- The guidance is general information produced by fixed rules. It is not personalised medical advice. Its thresholds are prototype triggers, and its risk bands are presentation categories, not clinical standards.
-- The target is a historical angiographic label. It is not a forecast of future cardiac events.
-- Predictions use a 0.5 threshold on the dataset target. Any risk categories added later will be prototype bands derived from model probability. They are not clinically validated thresholds.
+- **Not clinical validation.** A model reaching about 0.79 ROC-AUC on one public dataset is not a validated clinical tool. The larger dataset improves statistical stability, not clinical validity.
+- **Provenance:** Kaggle gives limited information about where the data came from. It describes the data as examination results. The population, the time period and how the label was defined are not documented in detail.
+- **Self-reported inputs:** `smoke`, `alco` and `active` are self-reported. Cholesterol and glucose are only three-level categories, not lab values.
+- **Learned patterns that contradict medical knowledge:** in this dataset, smokers and drinkers have *slightly lower* disease rates (smoking 46.9% vs 49.7%). As a result, the model gives Smoking = Yes a small *negative* contribution. Smoking is also strongly linked to gender here (22% of code-2 records versus 2% of code-1 records). This is a confounded pattern in the data, not medical evidence. It is a clear example of why SHAP explains the model and not medicine. The guidance engine still suggests support to stop smoking, because guidance is based on the inputs, not on the model. Similarly, "Glucose: well above normal" gets a slightly smaller learned effect than "above normal".
+- **Measurement errors:** the cleaning removes clear recording errors but cannot catch plausible-looking wrong values.
+- **Correlated features:** SHAP treats features as independent of each other. Correlated features (such as systolic and diastolic blood pressure) can therefore share credit in ways that do not match their clinical meaning.
+- **Age coverage:** inputs are limited to ages 29–65, the range the dataset covers.
+- **Library versions:** the model files are pickles tied to the pinned scikit-learn version; retrain after upgrading it.
+- **Fixed rules:** the guidance comes from fixed rules and is not personalised medical advice. Its thresholds are prototype prompts, and its risk bands are presentation categories, not clinical standards.
