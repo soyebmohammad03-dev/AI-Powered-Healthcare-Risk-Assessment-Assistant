@@ -1,0 +1,177 @@
+{
+  "seed": 42,
+  "split": {
+    "train": 242,
+    "test": 61
+  },
+  "dataset": {
+    "source": "https://archive.ics.uci.edu/ml/machine-learning-databases/heart-disease/processed.cleveland.data",
+    "records": 303,
+    "features": [
+      "age",
+      "trestbps",
+      "chol",
+      "thalach",
+      "oldpeak",
+      "ca",
+      "sex",
+      "cp",
+      "fbs",
+      "restecg",
+      "exang",
+      "slope",
+      "thal"
+    ],
+    "numeric": [
+      "age",
+      "trestbps",
+      "chol",
+      "thalach",
+      "oldpeak",
+      "ca"
+    ],
+    "categorical": [
+      "sex",
+      "cp",
+      "fbs",
+      "restecg",
+      "exang",
+      "slope",
+      "thal"
+    ],
+    "target": "target = 1 if original 'num' > 0 (disease present), else 0",
+    "class_counts": {
+      "0": 164,
+      "1": 139
+    },
+    "missing_values": {
+      "ca": 4,
+      "thal": 2
+    }
+  },
+  "models": {
+    "logistic_regression": {
+      "cv_train_5fold": {
+        "accuracy": {
+          "mean": 0.8387755102040815,
+          "std": 0.01611478692183707
+        },
+        "precision": {
+          "mean": 0.8768976789800588,
+          "std": 0.07138146493151333
+        },
+        "recall": {
+          "mean": 0.7656126482213439,
+          "std": 0.04511126604766409
+        },
+        "f1": {
+          "mean": 0.8135569462398731,
+          "std": 0.009755348178810085
+        },
+        "roc_auc": {
+          "mean": 0.9068573133790526,
+          "std": 0.01770678153276908
+        }
+      },
+      "test": {
+        "accuracy": 0.8688524590163934,
+        "precision": 0.8125,
+        "recall": 0.9285714285714286,
+        "f1": 0.8666666666666667,
+        "roc_auc": 0.9577922077922079,
+        "confusion_matrix": [
+          [
+            27,
+            6
+          ],
+          [
+            2,
+            26
+          ]
+        ]
+      }
+    },
+    "random_forest": {
+      "cv_train_5fold": {
+        "accuracy": {
+          "mean": 0.8262755102040815,
+          "std": 0.02886350547425413
+        },
+        "precision": {
+          "mean": 0.8312953576687592,
+          "std": 0.032339316482461127
+        },
+        "recall": {
+          "mean": 0.782608695652174,
+          "std": 0.0892878289186563
+        },
+        "f1": {
+          "mean": 0.8024825174825174,
+          "std": 0.043293208726708735
+        },
+        "roc_auc": {
+          "mean": 0.8951814690945126,
+          "std": 0.024572934868250594
+        }
+      },
+      "test": {
+        "accuracy": 0.8852459016393442,
+        "precision": 0.8387096774193549,
+        "recall": 0.9285714285714286,
+        "f1": 0.8813559322033898,
+        "roc_auc": 0.948051948051948,
+        "confusion_matrix": [
+          [
+            28,
+            5
+          ],
+          [
+            2,
+            26
+          ]
+        ]
+      }
+    },
+    "xgboost": {
+      "cv_train_5fold": {
+        "accuracy": {
+          "mean": 0.8056122448979591,
+          "std": 0.04338018350770867
+        },
+        "precision": {
+          "mean": 0.8052787601414604,
+          "std": 0.05958546430788134
+        },
+        "recall": {
+          "mean": 0.7652173913043478,
+          "std": 0.06815632220785812
+        },
+        "f1": {
+          "mean": 0.7824260633910688,
+          "std": 0.048772086338903044
+        },
+        "roc_auc": {
+          "mean": 0.867045595306465,
+          "std": 0.027288714302465957
+        }
+      },
+      "test": {
+        "accuracy": 0.9180327868852459,
+        "precision": 0.8709677419354839,
+        "recall": 0.9642857142857143,
+        "f1": 0.9152542372881356,
+        "roc_auc": 0.946969696969697,
+        "confusion_matrix": [
+          [
+            29,
+            4
+          ],
+          [
+            1,
+            27
+          ]
+        ]
+      }
+    }
+  }
+}
