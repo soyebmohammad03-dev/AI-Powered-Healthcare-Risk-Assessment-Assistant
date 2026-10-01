@@ -25,7 +25,7 @@ from src.preprocessing import CATEGORICAL, CATEGORIES, FEATURES, MODEL_FEATURES,
 
 MODELS_DIR = ROOT / "models"
 ARTIFACTS_DIR = ROOT / "artifacts"
-OOF_PATH = ARTIFACTS_DIR / "oof_predictions.npz"  # generated, not committed (about 10 MB)
+OOF_PATH = ARTIFACTS_DIR / "oof_predictions.npz"  # generated, not committed (about 7 MB)
 VARIANTS = ["raw", "sigmoid", "isotonic"]  # raw probabilities, Platt scaling, isotonic regression
 N_FOLDS, N_REPEATS = 5, 5
 

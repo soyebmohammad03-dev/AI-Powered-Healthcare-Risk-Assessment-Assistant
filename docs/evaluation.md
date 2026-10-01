@@ -27,7 +27,7 @@ Each model in its selected variant, mean ± std [min, max] over the 25 splits:
 |---|---|---|---|---|---|---|---|---|
 | Logistic Regression (isotonic) | 0.791 ± 0.004 [0.785, 0.801] | 0.766 ± 0.004 [0.760, 0.777] | 0.185 ± 0.002 [0.181, 0.188] | 0.554 ± 0.005 | 0.720 ± 0.005 | 0.730 ± 0.004 | 0.738 ± 0.005 | 0.704 ± 0.009 |
 | Random Forest (isotonic) | 0.799 ± 0.004 [0.793, 0.807] | 0.776 ± 0.005 [0.768, 0.788] | 0.181 ± 0.002 [0.178, 0.184] | 0.544 ± 0.004 | 0.719 ± 0.008 | 0.733 ± 0.004 | 0.750 ± 0.011 | 0.691 ± 0.021 |
-| **XGBoost (raw)** | **0.801 ± 0.004 [0.795, 0.808]** | **0.782 ± 0.005 [0.776, 0.795]** | **0.181 ± 0.002 [0.177, 0.183]** | **0.542 ± 0.004** | 0.720 ± 0.005 | 0.735 ± 0.004 | 0.753 ± 0.004 | 0.690 ± 0.007 |
+| **XGBoost (raw)** | **0.801 ± 0.004 [0.795, 0.808]** | **0.782 ± 0.005 [0.776, 0.795]** | **0.181 ± 0.002 [0.177, 0.183]** | **0.542 ± 0.004** | 0.720 ± 0.004 | 0.735 ± 0.004 | 0.753 ± 0.004 | 0.690 ± 0.007 |
 
 F1, accuracy, precision and recall use the 0.50 threshold. The split-to-split spread (std ≈ 0.004 ROC-AUC) is about half the gap between Logistic Regression and the tree models. Random Forest has the least stable recall and precision across splits (std 0.021 and 0.011). The Model page shows the 25 per-split values as box plots.
 
@@ -57,13 +57,13 @@ Reading the result:
 - **Known costs, not used to choose.** The costs of this choice are measured in section 10 (less smooth responses, less stable explanations). They were measured after selection and were not used to override it.
 
 ## 4. Held-out test set and bootstrap intervals
-The test set is scored once per model, after selection. Nothing (model, calibrator, threshold, detector) is fitted or chosen on it.
+The test set is scored once per model, after selection. Nothing (model, calibrator, threshold, detector) is fitted or chosen on it. Until Phase 8 the novelty detector's method choice was scored on test records; Phase 9 moved it to training rows (section 10).
 
 Percentile bootstrap: 1,000 paired resamples of the 13,715 test rows (seed 42); 95% interval = 2.5th–97.5th percentile.
 
 | Model | ROC-AUC | PR-AUC | F1 (0.50) | Brier | ECE |
 |---|---|---|---|---|---|
-| **XGBoost (raw, final)** | 0.804 [0.797, 0.812] | 0.785 [0.774, 0.796] | 0.722 [0.714, 0.731] | 0.180 [0.176, 0.183] | 0.008 [0.007, 0.018] |
+| **XGBoost (raw, final)** | 0.804 [0.797, 0.812] | 0.785 [0.774, 0.796] | 0.722 [0.714, 0.731] | 0.180 [0.176, 0.183] | 0.008 [0.007, 0.017] |
 | Random Forest (isotonic) | 0.802 [0.795, 0.810] | 0.776 [0.766, 0.786] | 0.725 [0.717, 0.733] | 0.180 [0.177, 0.184] | 0.009 [0.007, 0.017] |
 | Logistic Regression (isotonic) | 0.793 [0.786, 0.801] | 0.770 [0.759, 0.781] | 0.725 [0.717, 0.733] | 0.184 [0.181, 0.188] | 0.005 [0.006, 0.016] |
 
@@ -71,7 +71,7 @@ Paired differences from the final model (other − XGBoost):
 
 | Model | ROC-AUC | PR-AUC | F1 (0.50) | Brier |
 |---|---|---|---|---|
-| Logistic Regression | −0.011 [−0.014, −0.009] | −0.015 [−0.021, −0.009] | +0.003 [−0.002, +0.007] | +0.005 [+0.004, +0.006] |
+| Logistic Regression | −0.011 [−0.014, −0.009] | −0.015 [−0.021, −0.009] | +0.003 [−0.002, +0.007] | +0.005 [+0.003, +0.006] |
 | Random Forest | −0.002 [−0.004, −0.001] | −0.009 [−0.013, −0.005] | +0.003 [−0.001, +0.006] | +0.001 [+0.000, +0.001] |
 
 - **ECE is biased under resampling.** ECE is a binned statistic, and resampling noise adds to every bin's gap. Its bootstrap interval can therefore lie *above* the point estimate, as it does for Logistic Regression. Read it as variability, not as a bracket.
@@ -182,13 +182,14 @@ These are descriptive differences. No model was tuned on them, and they are not 
 - **The user's input is never used for fitting.**
 
 **Two methods were compared under a pre-declared rule:**
-- **Evaluation set:** test records versus "atypical combinations", which are test values recombined at random and kept only if valid.
+- **Evaluation set:** the 10,972 reference rows versus 10,862 "atypical combinations", which are reference values recombined at random and kept only if valid. Only training rows are used.
 - **Rule:** the higher ROC-AUC wins; a tie goes to the simpler method.
+- **Phase 9 correction:** this comparison used test records until Phase 8. The choice and the threshold are unchanged by the correction (the earlier AUCs were 0.648 vs 0.557).
 
-| Method | Flag rate, reference | Flag rate, test | Flag rate, atypical | AUC test vs atypical |
+| Method | Flag rate, reference | Flag rate, atypical | AUC reference vs atypical | Flag rate, test (reported afterwards) |
 |---|---|---|---|---|
-| **Mahalanobis distance** on the 4 scaled continuous features (chosen) | 1.0% | 1.04% | 3.6% | 0.648 |
-| Isolation Forest on all 14 columns | 1.0% | 0.91% | 0.6% | 0.557 |
+| **Mahalanobis distance** on the 4 scaled continuous features (chosen) | 1.0% | 3.6% | 0.653 | 1.04% |
+| Isolation Forest on all 14 columns | 1.0% | 0.7% | 0.560 | 0.91% |
 
 - **Why classical covariance.** The robust (MCD) covariance estimate was tried first and discarded: it degenerates on this data, where 40% of systolic readings are exactly 120 mmHg and 51% of diastolic readings exactly 80.
 - **Generalisation.** The test-set flag rate (1.04%) matches the reference rate, so the threshold generalises.
@@ -204,9 +205,9 @@ These are descriptive differences. No model was tuned on them, and they are not 
 
 | Model | ±1% | ±2% | ±5% | Unchanged at ±1% |
 |---|---|---|---|---|
-| Logistic Regression (isotonic) | 0.0 / 2.8 / 6.0 | 0.0 / 5.9 / 9.0 | 1.7 / 11.4 / 19.6 | 66% |
-| Random Forest (isotonic) | 0.0 / 4.7 / 15.9 | 0.0 / 6.7 / 24.7 | 1.0 / 11.2 / 31.5 | 69% |
-| **XGBoost (raw, final)** | **0.7 / 11.4 / 37.4** | **1.1 / 11.4 / 43.9** | **2.3 / 14.4 / 43.9** | **14%** |
+| Logistic Regression (isotonic) | 0.0 / 2.7 / 6.0 | 0.0 / 5.9 / 9.0 | 1.7 / 11.3 / 19.6 | 66% |
+| Random Forest (isotonic) | 0.0 / 4.7 / 15.9 | 0.0 / 6.6 / 24.7 | 1.0 / 11.2 / 31.5 | 69% |
+| **XGBoost (raw, final)** | **0.7 / 11.4 / 37.4** | **1.1 / 11.4 / 43.9** | **2.2 / 14.4 / 43.9** | **14%** |
 
 **Finding (a weakness of the selected model).** XGBoost responds less smoothly: a 1% change can move its estimate by tens of percentage points.
 - **Why.** Its trees split near the round values at which blood pressure is recorded (120/80), so a small change crosses a split.

@@ -193,6 +193,16 @@ def test_detector_is_fit_on_training_rows_only(detector, data):
     assert not set(detector["fit_index"]) & set(X_test.index)
 
 
+def test_detector_choice_does_not_depend_on_the_test_set(R, data):
+    """Detector comparison and threshold use training rows only: any other test set gives the same choice."""
+    X_train, X_test, _, _ = data
+    summary, _ = rel.novelty_detection(X_train, X_test.iloc[:500])
+    assert summary["chosen"] == R["novelty"]["chosen"]
+    for name, m in summary["methods"].items():
+        for k in ("threshold", "flag_rate_reference", "flag_rate_atypical", "auc_reference_vs_atypical"):
+            assert m[k] == pytest.approx(R["novelty"]["methods"][name][k], abs=1e-9)
+
+
 def test_conformity_flags_unusual_inputs_without_blocking(detector):
     normal = rel.input_conformity(B, detector)
     assert not normal["unusual"] and normal["unusual_features"] == []

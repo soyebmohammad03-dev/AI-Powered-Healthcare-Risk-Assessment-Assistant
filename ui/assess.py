@@ -171,7 +171,7 @@ label for these inputs. Not a diagnosis, and not a clinically validated individu
 </div>""")
     with st.expander("Probability, band and threshold are three different things"):
         st.markdown(
-            "- **Probability**: the model's calibrated estimate for these inputs.\n"
+            "- **Probability**: the model's estimated probability for these inputs.\n"
             "- **Display band**: Lower (<30%), Moderate (30–60%), Higher (≥60%), a presentation category made "
             "for this prototype. It is not a clinical threshold.\n"
             "- **Classification threshold**: the 0.50 cut-off that turns the probability into the class output. "

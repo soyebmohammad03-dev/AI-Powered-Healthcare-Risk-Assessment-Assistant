@@ -51,8 +51,8 @@ class FeatureContribution:
 class LocalExplanation:
     base_value: float           # reference score (see module docstring)
     model_output: float         # score for this input = base_value + sum of contributions
-    base_probability: float     # calibrated probability at base_value (the reference shown to users)
-    probability_positive: float # calibrated probability for this input (== prediction service)
+    base_probability: float     # displayed probability at base_value (the reference shown to users)
+    probability_positive: float # displayed probability for this input (== prediction service)
     uncalibrated_probability: float  # link(model_output), before calibration; for transparency
     contributions: list[FeatureContribution]  # sorted by |shap_value|, largest first
 
@@ -219,7 +219,7 @@ if __name__ == "__main__":
     from src.prediction import DEMO_INPUTS, predict
 
     explainer = default_explainer()
-    print(f"Base score: {explainer.base_value:+.4f}  (calibrated probability {explainer.base_probability:.4f})")
+    print(f"Base score: {explainer.base_value:+.4f}  (displayed probability {explainer.base_probability:.4f})")
     for name, patient in DEMO_INPUTS.items():
         e, p = explainer.explain(patient), predict(patient)
         print(f"\n{name}: P(pos) predict={p.probability_positive:.4f} explain={e.probability_positive:.4f} "

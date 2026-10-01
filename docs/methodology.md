@@ -7,7 +7,7 @@ Measured results are in [evaluation.md](evaluation.md). Intended use and limitat
 ## 1. Dataset and why it was chosen
 The project uses the Cardiovascular Disease dataset by S. Ulianova on Kaggle (`sulianova/cardiovascular-disease-dataset`). It contains 70,000 records with 11 everyday health inputs and a binary disease label.
 
-It replaced the 303-record UCI Cleveland data for three reasons:
+It replaced the 303-record UCI Cleveland data used in the earliest prototype, for two reasons:
 - **Size:** with about 68,500 usable records, cross-validation, calibration, bootstrap intervals and subgroup analysis become statistically meaningful.
 - **Everyday inputs:** a non-specialist can actually supply age, blood pressure, height, weight and lifestyle answers. Angiography or thallium-scan results cannot be supplied that way.
 
@@ -53,7 +53,7 @@ That leaves 68,573 records. `clean_with_exclusions` keeps the removed rows for t
 - **Test set:** scored once per model, after selection. No model, calibrator, threshold or novelty detector is fitted or chosen on it, and automated tests check this (section 13).
 
 ## 4. Model comparison with repeated cross-validation
-Three models are compared: Logistic Regression, Random Forest (200 trees, depth 10) and XGBoost (300 trees, depth 4). Each is evaluated raw, with sigmoid calibration and with isotonic calibration, using `RepeatedStratifiedKFold(n_splits=5, n_repeats=5, random_state=42)` on the training split. That gives 25 train/validation splits, shared by all nine variants.
+Three models are compared: Logistic Regression, Random Forest (200 trees, depth 10) and XGBoost (300 trees, depth 4). These hyperparameters are fixed in `build_models` and have not changed since Phase 1. No hyperparameter search was run, on any data. Each is evaluated raw, with sigmoid calibration and with isotonic calibration, using `RepeatedStratifiedKFold(n_splits=5, n_repeats=5, random_state=42)` on the training split. That gives 25 train/validation splits, shared by all nine variants.
 
 `oof_cross_validate` fits a fresh clone of the whole pipeline on each split's training rows, including any calibrator. It then scores eight metrics on the split's validation rows. Each metric is reported as mean, standard deviation, minimum and maximum over the 25 splits, not as the mean alone.
 
@@ -146,7 +146,7 @@ Groups with only one class, or with fewer than 30 records of either class, get "
   - *Score spaces:* log-odds for Logistic Regression and XGBoost; probability for Random Forest.
   - *Readable features:* one-hot columns are summed back into readable features.
   - *Displayed probability:* link(score), then the calibrator if there is one. Each step is monotone, so directions are preserved but sizes are not additive in percentage points.
-- **Global SHAP:** mean |SHAP| over 5,000 random cleaned records.
+- **Global SHAP:** mean |SHAP| over 5,000 random cleaned records (training and test rows). This describes the fitted model's attributions; nothing is fitted or chosen from it.
 - **Permutation importance:** the drop in test ROC-AUC when an input is shuffled (10 repeats).
 - **Partial dependence and ICE:** 2,000 test records, all three candidates, skipping invalid grid points.
 - **Interactions:** XGBoost SHAP interaction values on 1,000 test records.
@@ -168,8 +168,9 @@ All of these analyses run offline (`python -m src.reliability` and `python -m sr
 - **Input conformity (novelty detection).**
   - *Space and data:* the model's preprocessed feature space, refitted on 80% of the training split. The threshold is the 99th percentile of scores on the remaining 20% (reference flag rate 1%).
   - *Methods compared:* a Mahalanobis distance on the four scaled continuous features, and an Isolation Forest on all 14 columns.
-  - *Pre-declared rule:* the higher ROC-AUC for separating test records from "atypical combinations" (test values recombined at random, kept only if valid) wins; a tie goes to the simpler method.
-  - *Result:* Mahalanobis won (0.648 vs 0.557).
+  - *Pre-declared rule:* the higher ROC-AUC for separating the reference rows from "atypical combinations" (reference values recombined at random, kept only if valid) wins; a tie goes to the simpler method. The test set's flag rate is reported afterwards, descriptively.
+  - *Phase 9 correction:* until Phase 8 this comparison used test records, so a detector choice was made with test-set data. That contradicted section 3. It now uses training rows only, and a test checks that the choice does not depend on the test set (section 13).
+  - *Result:* Mahalanobis won (0.653 vs 0.560). The earlier test-based comparison had chosen the same method (0.648 vs 0.557), and the threshold is unchanged.
   - *Why not robust MCD covariance:* it degenerates because blood pressures are heavily rounded.
   - *Novelty, not outlier detection:* following scikit-learn's distinction, the detector is fitted on reference data only and then applied to new inputs. It never refits on, or learns from, the user's input.
   - *Limitations:* it separates atypical combinations only weakly, so it mainly catches extreme values. It is a statistical caution, never a validation error or a medical judgement.
@@ -192,7 +193,7 @@ All of these analyses run offline (`python -m src.reliability` and `python -m sr
 - **Selection never reads the test set.** The selection functions only read CV results, and a test confirms the decision is unchanged when every test-set number is scrambled or removed.
 - **Calibrated variants are never scored on the test set.** Only each model's selected variant is scored, once, after selection.
 - **The final pipeline used training rows only.** Refitting the selected variant on the training split reproduces the persisted final pipeline (to 1e-6). The same holds for the Logistic Regression candidate (to 1e-12), so no fitted step, calibrator included, saw test rows.
-- **The OOF file covers only training rows,** with valid fold metadata. The novelty detector's fitting rows are training rows only.
+- **The OOF file covers only training rows,** with valid fold metadata. The novelty detector's fitting rows are training rows only, and its method choice is unchanged when a different test set is passed in.
 - **No threshold is tuned:** no artifact contains a selected threshold.
 
 ## 14. Prediction service and UI

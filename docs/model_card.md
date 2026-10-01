@@ -58,7 +58,7 @@ Random Forest beat Logistic Regression, and XGBoost then beat Random Forest, bot
 | PR-AUC | 0.785 | 0.774–0.796 |
 | F1 at 0.50 | 0.722 | 0.714–0.731 |
 | Brier score | 0.180 | 0.176–0.183 |
-| ECE (10 bins) | 0.008 | 0.007–0.018 |
+| ECE (10 bins) | 0.008 | 0.007–0.017 |
 | Log loss | 0.538 | |
 | Accuracy / precision / recall at 0.50 | 0.737 / 0.755 / 0.692 | |
 
@@ -78,7 +78,7 @@ CV ROC-AUC was 0.801 ± 0.004 (range 0.795–0.808 over 25 splits). Logistic Reg
 
 ### Reliability and robustness
 Measured after selection, and reported rather than used to re-select:
-- **Responses are less smooth.** Changing one numeric input by 1% moves XGBoost's estimate by a median of 0.7 percentage points (pp), but by 11 pp at the 95th percentile and up to 37 pp. Logistic Regression's equivalents are 0.0 / 2.8 / 6.0 pp. Recorded blood pressures cluster at round values (40% of systolic readings are exactly 120 mmHg), and the trees split near them.
+- **Responses are less smooth.** Changing one numeric input by 1% moves XGBoost's estimate by a median of 0.7 percentage points (pp), but by 11 pp at the 95th percentile and up to 37 pp. Logistic Regression's equivalents are 0.0 / 2.7 / 6.0 pp. Recorded blood pressures cluster at round values (40% of systolic readings are exactly 120 mmHg), and the trees split near them.
 - **The response is not monotone.** For all 23 tested profiles, XGBoost's estimate is non-monotone in systolic BP, diastolic BP, age and weight. The largest single-step drop along systolic BP was 14 pp. Logistic Regression was non-decreasing in every case.
 - **Explanations are less stable.** Under ±1% changes, XGBoost's top-5 contributions stayed identical in 74% of cases (Logistic Regression 95%, Random Forest 92%). The top feature was preserved in 96%.
 - **The candidate models disagree.** Across the test set, the spread between the three models' estimates has a median of 5 pp and a 95th percentile of 17 pp. All three give the same class at 0.50 in 92% of records.
@@ -109,6 +109,16 @@ This is a Subgroup Performance Analysis. It describes differences and is not a f
 - **Narrow coverage:** the data covers ages 29–65 only, and gender groups are imbalanced (65% code 1).
 - **Correlated inputs:** systolic and diastolic blood pressure are correlated (r = 0.73), so explanations can split credit between them unintuitively.
 - **Step-wise model:** the selected tree model reacts in steps and is not monotone in its main inputs (see Reliability and robustness). Small input changes, or rounding, can change the estimate noticeably.
+
+### Ethical considerations
+- **Risk of over-trust.** A precise-looking percentage can read as a personal medical risk. The app labels it a model estimate of a dataset label, shows prototype bands rather than verdicts, and shows its reliability signals separately, never as one combined "trust score".
+- **Uneven performance.** Ranking is weaker for older people in this data (see Subgroup performance). Only gender and age bands could be examined; the dataset records no ethnicity, socioeconomic or clinical-history variables, so performance for other groups is unknown.
+- **Confounded associations.** Some learned directions (smoking, alcohol, very high glucose) run against medical knowledge. They are shown and explained as dataset artefacts, never as advice.
+- **No personal data stored.** Inputs live only in the running app's in-memory session state and caches; the app writes no inputs to disk and sends them nowhere.
+- **Guidance is rule-based.** It comes from fixed, readable rules; there is no language model, no named treatment and no instruction to take a medical action.
+
+### Reproducibility
+Every number on this card comes from the committed artifacts in `artifacts/` (each with a `provenance` block: library versions, dataset SHA-256, seed 42). `./scripts/setup.sh --regenerate` rebuilds the models and all artifacts from the pinned dataset. The evidence chain is described in `docs/RESEARCH_VALIDATION.md`.
 
 ### Non-clinical status
 No clinical validation, regulatory review or prospective evaluation has been performed. Display bands (<30%, 30–60%, ≥60%) and the 0.50 classification threshold are prototype devices, not clinical thresholds. The guidance shown alongside the estimate comes from fixed informational rules. It is not medical advice.

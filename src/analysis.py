@@ -3,8 +3,9 @@
 Run: python -m src.analysis   (after python -m src.train_models; takes about a minute)
 Robustness analyses (OOF calibration, novelty, stability, disagreement) live in src/reliability.py.
 
-Everything here uses the held-out TEST split for model behaviour (never used for fitting or selection)
-and the cleaned dataset only for descriptive data-quality statistics. The UI reads the JSON; it never
+Model performance is measured on the held-out TEST split (never used for fitting or selection). The cleaned
+dataset (train + test) is used for descriptive data-quality statistics and for global SHAP, which describes
+the fitted model's attributions and fits nothing. The UI reads the JSON; it never
 recomputes these analyses per request.
 """
 import json
@@ -62,6 +63,7 @@ def data_quality(raw: pd.DataFrame, df: pd.DataFrame, removed: dict, excluded: d
         "ranges": {c: {"raw": raw_years[c].quantile([0, .01, .5, .99, 1]).round(1).tolist(),
                        "clean": df[c].quantile([0, .01, .5, .99, 1]).round(1).tolist()} for c in DESCRIBE},
         "histograms": hist, "categorical": categorical,
+        "rounded_bp": {"ap_hi_120": float((df["ap_hi"] == 120).mean()), "ap_lo_80": float((df["ap_lo"] == 80).mean())},
         "correlation": {"features": list(numeric.columns), "matrix": numeric.corr().round(3).values.tolist()},
     }
 

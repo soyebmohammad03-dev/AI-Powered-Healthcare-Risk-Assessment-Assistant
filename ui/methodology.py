@@ -108,10 +108,12 @@ with tabs[2]:
   python -m src.shift_analysis`. Detailed numbers: `docs/evaluation.md`.
 """)
 
+AGE_AUC = {r["group"]: r["roc_auc"] for r in A["subgroups"]["age_group"] if r["reliable"]}
 with tabs[3]:
-    st.markdown("""
-- **Not clinically validated.** One public dataset with limited provenance; about 0.80 ROC-AUC. Calibration
-  aligns probabilities with this dataset's labels, not with any clinical population.
+    st.markdown(f"""
+- **Not clinically validated.** One public dataset with limited provenance; test ROC-AUC
+  {A['models'][A['final_model']]['test']['roc_auc']:.3f}. Probabilities agree with this dataset's labels, not with
+  any clinical population.
 - **Step-wise, non-monotone final model.** XGBoost's estimate can jump by many percentage points for a 1–2%
   input change near a split point, and it is not monotone in blood pressure, age or weight for every profile.
 - **Explanations are less stable than with a linear model.** Small input changes alter XGBoost's top-5
@@ -120,7 +122,8 @@ with tabs[3]:
   are three-level categories, not lab values.
 - **Confounded patterns.** Smoking and alcohol show slightly lower label rates in this data, so the model can
   move the estimate lower for them. This is model behaviour, never medical evidence.
-- **Weaker in older ages.** ROC-AUC is about 0.70 for ages 60–65 versus about 0.83 for 40–49.
+- **Weaker in older ages.** Test ROC-AUC is {AGE_AUC.get('60–65', float('nan')):.2f} for ages 60–65 versus
+  {AGE_AUC.get('40–49', float('nan')):.2f} for 40–49.
 - **Explanations describe the model.** SHAP, permutation importance, partial dependence and what-if results are
   about this trained model, not about causes of disease. Correlated inputs (systolic/diastolic) share credit.
 - **Prototype bands and thresholds.** The <30/30–60/≥60% bands and the 0.50 threshold are presentation and

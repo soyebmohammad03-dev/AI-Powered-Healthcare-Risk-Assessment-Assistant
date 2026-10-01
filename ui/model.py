@@ -27,6 +27,16 @@ def name(model: str) -> str:
     return MODEL_NAMES[model] + (" (final)" if model == FINAL else "")
 
 
+def _corr(a: str, b: str) -> float:
+    c = A["data_quality"]["correlation"]
+    return c["matrix"][c["features"].index(a)][c["features"].index(b)]
+
+
+def _test_prevalence() -> float:
+    r = A["thresholds"]["table"][0]
+    return (r["tp"] + r["fn"]) / (r["tp"] + r["fp"] + r["tn"] + r["fn"])
+
+
 def ci(value, interval) -> str:
     return f"{value:.3f} [{interval[0]:.3f}, {interval[1]:.3f}]"
 
@@ -97,10 +107,12 @@ with tabs[0]:
         st.markdown(f"- `{step}`")
     for m, comp in R["comparison"].items():
         st.markdown(f"- **{MODEL_NAMES[m]}:** {comp['calibration_reason']}")
+    lr_cv = R["comparison"]["logistic_regression"][R["comparison"]["logistic_regression"]["selected"]]["cv"]
     note("<b>Methodological correction.</b> The previous version chose Logistic Regression with margins "
          "(0.02 ROC-AUC, 0.001 Brier) that were set after the first comparison was known. Those margins are no "
          "longer used. Under the pre-declared protocol the evidence selects the model above; the differences are "
-         "small in absolute terms (about 0.01 ROC-AUC) but consistent across splits. See <b>Robustness</b> for "
+         f"small in absolute terms ({sel_cv['roc_auc']['mean'] - lr_cv['roc_auc']['mean']:+.3f} "
+         "CV ROC-AUC over Logistic Regression) but consistent across splits. See <b>Robustness</b> for "
          "the costs of this choice (less smooth responses, less stable explanations).")
 
 # ---- calibration ------------------------------------------------------------------------------
@@ -146,10 +158,13 @@ with tabs[1]:
                    "Slope and intercept: logistic recalibration of the outcome on logit(p); slope 1 and intercept 0 "
                    "mean no linear miscalibration. They cannot see S-shaped miscalibration, which ECE and the curve can.")
         if model == "logistic_regression":
-            note("<b>Finding.</b> Raw Logistic Regression has slope ≈ 1 and intercept ≈ 0, yet ECE 0.034: its "
+            lr = {v: d["stats"] for v, d in cal["models"][model]["variants"].items()}
+            note(f"<b>Finding.</b> Raw Logistic Regression has slope {lr['raw']['slope']['mean']:.2f} and intercept "
+                 f"{round(lr['raw']['intercept']['mean'], 3) + 0.0:.3f}, yet ECE {lr['raw']['ece']['mean']:.3f}: its "
                  "miscalibration is S-shaped (over-estimates around 25–35% and at the top, under-estimates around "
                  "55–75%), which a logistic recalibration cannot represent. Sigmoid calibration therefore changes "
-                 "nothing; isotonic calibration lowers ECE to about 0.002 and Brier in every repeat.")
+                 f"nothing; isotonic calibration lowers ECE to {lr['isotonic']['ece']['mean']:.3f} and Brier in "
+                 "every repeat.")
         else:
             note(f"<b>Finding.</b> {MODEL_NAMES[model]}'s raw probabilities already agree closely with observed "
                  "frequencies out-of-fold; neither calibrator lowered CV Brier significantly, so the protocol kept "
@@ -264,8 +279,8 @@ with tabs[3]:
               title=dict(text="Net benefit (exploratory, this dataset only)", font=dict(size=13)))
     st.caption("Left: lowering the threshold converts false negatives into false positives. Right: net benefit = "
                "TP/n − FP/n × t/(1 − t), a decision-curve summary that weighs a false positive t/(1 − t) times "
-               "a true positive. It depends on this dataset's prevalence (about 50%) and says nothing about clinical "
-               "utility.")
+               f"a true positive. It depends on this dataset's prevalence ({_test_prevalence():.0%}) "
+               "and says nothing about clinical utility.")
     section("Confusion matrices at selected thresholds")
     cols = st.columns(3)
     for col, thr in zip(cols, (0.3, 0.5, 0.7)):
@@ -328,7 +343,7 @@ with tabs[4]:
     chart(fig, height=380, yaxis_tickformat=".0%", xaxis_title=resp["label"], yaxis_title="Model-estimated probability")
     st.caption("2,000 test records; each line varies one input over its 2nd–98th percentile with the others fixed. "
                "Grid points that would create an impossible record (systolic ≤ diastolic, implausible BMI) are "
-               "skipped. Systolic and diastolic pressure are correlated (r = 0.73), so varying one alone partly "
+               f"skipped. Systolic and diastolic pressure are correlated (r = {_corr('ap_hi', 'ap_lo'):.2f}), so varying one alone partly "
                "creates unusual combinations; read these as model behaviour, not physiology.")
 
     section("Feature interactions (XGBoost)")
@@ -428,17 +443,18 @@ with tabs[7]:
     nv = REL["novelty"]
     st.dataframe(pd.DataFrame([{"Method": m.replace("_", " ").capitalize() + (" ✓ chosen" if m == nv["chosen"] else ""),
                                 "Flag rate, reference rows": d["flag_rate_reference"],
-                                "Flag rate, test rows": d["flag_rate_test"],
                                 "Flag rate, atypical combinations": d["flag_rate_atypical"],
-                                "AUC test vs atypical": d["auc_test_vs_atypical"]} for m, d in nv["methods"].items()]),
+                                "AUC reference vs atypical": d["auc_reference_vs_atypical"],
+                                "Flag rate, test rows": d["flag_rate_test"]} for m, d in nv["methods"].items()]),
                  hide_index=True, width="stretch",
                  column_config={c: st.column_config.NumberColumn(format="%.3f") for c in
-                                ("Flag rate, reference rows", "Flag rate, test rows", "Flag rate, atypical combinations",
-                                 "AUC test vs atypical")})
+                                ("Flag rate, reference rows", "Flag rate, atypical combinations",
+                                 "AUC reference vs atypical", "Flag rate, test rows")})
     st.caption(f"Both detectors were fit on {nv['fit_rows']:,} training rows; the threshold is the 99th percentile of "
                f"{nv['reference_rows']:,} held-back training rows. 'Atypical combinations' ({nv['atypical_rows']:,} "
-               "records) are test values recombined at random, kept only if valid. Pre-declared rule: higher AUC "
-               "wins, a tie goes to the simpler method. Neither separates atypical combinations strongly, so the "
+               "records) are reference values recombined at random, kept only if valid. Pre-declared rule: higher AUC "
+               "wins, a tie goes to the simpler method; the choice uses training rows only, and the test flag rate "
+               "is reported afterwards. Neither separates atypical combinations strongly, so the "
                "check mainly catches extreme values and is a statistical caution, not a medical abnormality detector.")
 
     section("Prediction stability under small input changes")

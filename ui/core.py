@@ -165,8 +165,10 @@ def step_note(bundle: dict) -> str:
     """Why the model estimate moves in steps, for the final model actually deployed."""
     if bundle["model_name"] == "logistic_regression":
         return "Flat steps come from the isotonic calibration." if bundle["calibration"] == "isotonic" else ""
+    share = ((artifact("analysis.json") or {}).get("data_quality", {}).get("rounded_bp") or {}).get("ap_hi_120")
+    detail = f" ({share:.0%} of systolic readings are exactly 120 mmHg)" if share is not None else ""
     return ("Steps and dips come from the tree model's split points; blood pressures in this data cluster at "
-            "round values (40% of systolic readings are exactly 120 mmHg), so splits sit near them.")
+            f"round values{detail}, so splits sit near them.")
 
 
 # ---- components -------------------------------------------------------------------------------

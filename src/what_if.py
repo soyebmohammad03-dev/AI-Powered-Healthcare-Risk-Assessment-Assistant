@@ -4,7 +4,7 @@ This is model sensitivity analysis, not a forecast of medical outcomes. Guardrai
   * only ADJUSTABLE inputs may change (age, gender and height stay as assessed);
   * every scenario is rebuilt through PatientInput, so the same ranges and cross-field rules apply
     (systolic > diastolic, plausible BMI); an impossible scenario raises InvalidInputError.
-The calibrated probability is piecewise constant, so small input changes can leave it unchanged.
+The tree model's probability is piecewise constant, so small input changes can leave it unchanged.
 """
 from dataclasses import asdict, dataclass, replace
 

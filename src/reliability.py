@@ -119,11 +119,13 @@ def atypical_combinations(X: pd.DataFrame, seed: int = SEED) -> pd.DataFrame:
 def novelty_detection(X_train, X_test) -> tuple[dict, dict]:
     """Pre-declared procedure: fit each detector on 80% of the TRAINING split, set its threshold at the
     99th percentile of the other 20% (the "reference" flag rate is 1% by construction), then compare the
-    detectors on test-set records vs atypical combinations of test values (ROC-AUC of the score). The higher
-    AUC wins; a tie goes to the simpler Mahalanobis distance. The user's input is never used to fit."""
+    detectors on those reference rows vs atypical combinations of reference values (ROC-AUC of the score).
+    The higher AUC wins; a tie goes to the simpler Mahalanobis distance. The choice uses training rows only
+    (Phase 9 correction: it previously used test rows); the test flag rate is reported afterwards, descriptively.
+    The user's input is never used to fit."""
     X_fit, X_ref = train_test_split(X_train, test_size=0.2, random_state=SEED)
     pre = build_preprocessor().fit(X_fit)
-    atypical = atypical_combinations(X_test)
+    atypical = atypical_combinations(X_ref)
     Z_fit, Z_ref, Z_test, Z_atyp = (pre.transform(x) for x in (X_fit, X_ref, X_test, atypical))
     report, fitted = {}, {}
     for name in DETECTORS:
@@ -132,12 +134,12 @@ def novelty_detection(X_train, X_test) -> tuple[dict, dict]:
         threshold = float(np.quantile(ref, 1 - REFERENCE_FLAG_RATE))
         s_test, s_atyp = score_detector(name, det, Z_test), score_detector(name, det, Z_atyp)
         report[name] = {"threshold": threshold, "flag_rate_reference": float((ref > threshold).mean()),
-                        "flag_rate_test": float((s_test > threshold).mean()),
                         "flag_rate_atypical": float((s_atyp > threshold).mean()),
-                        "auc_test_vs_atypical": float(roc_auc_score(
-                            np.r_[np.zeros(len(s_test)), np.ones(len(s_atyp))], np.r_[s_test, s_atyp]))}
+                        "auc_reference_vs_atypical": float(roc_auc_score(
+                            np.r_[np.zeros(len(ref)), np.ones(len(s_atyp))], np.r_[ref, s_atyp])),
+                        "flag_rate_test": float((s_test > threshold).mean())}  # descriptive, after the choice
         fitted[name] = {"detector": det, "threshold": threshold, "reference_scores": np.sort(ref)}
-    chosen = max(DETECTORS, key=lambda n: (round(report[n]["auc_test_vs_atypical"], 3), n == "mahalanobis"))
+    chosen = max(DETECTORS, key=lambda n: (round(report[n]["auc_reference_vs_atypical"], 3), n == "mahalanobis"))
     raw_ref = add_bmi(X_ref)
     bundle = {"method": chosen, "pre": pre, **fitted[chosen], "fit_index": X_fit.index.to_numpy(),
               "ranges": {f: [float(raw_ref[f].quantile(0.005)), float(raw_ref[f].quantile(0.995))]

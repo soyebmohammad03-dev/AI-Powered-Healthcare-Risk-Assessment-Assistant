@@ -2,7 +2,7 @@
 
 **An Explainable AI-Based Human-Centered Healthcare Decision Support System.** This is an educational research prototype for the B.Tech course *Design of Artificial Intelligence Products*.
 
-> **Medical disclaimer.** This prototype does **not** diagnose cardiovascular disease, prescribe treatment, or replace a healthcare professional, and it is not medical advice. Its outputs are model-based estimates from one public research dataset and are **not clinically validated**. Calibrated probabilities agree with that dataset's labels; they are not clinical risks.
+> **Medical disclaimer.** This prototype does **not** diagnose cardiovascular disease, prescribe treatment, or replace a healthcare professional, and it is not medical advice. Its outputs are model-based estimates from one public research dataset and are **not clinically validated**. Its probabilities agree with that dataset's labels; they are not clinical risks.
 
 The system estimates a probability, shows how trustworthy and how explainable that estimate is, and lets you inspect the model critically. Its components:
 - **An evidence-selected model.** A pre-declared protocol chooses among three candidate models on 25 repeated CV splits, and the result is accepted even when it is not the most interpretable model.
@@ -57,7 +57,7 @@ Design notes:
 
 ## Machine-learning methodology
 
-Full details are in [docs/methodology.md](docs/methodology.md), and every measured number is in [docs/evaluation.md](docs/evaluation.md).
+Full details are in [docs/methodology.md](docs/methodology.md), and every measured number is in [docs/evaluation.md](docs/evaluation.md). [docs/RESEARCH_VALIDATION.md](docs/RESEARCH_VALIDATION.md) traces each claim to the artifact that produces it, and records the Phase 9 audit.
 
 - **Strategy:** a stratified 80/20 split (54,858 train / 13,715 test). All comparisons use **5-fold CV repeated 5 times** (25 splits) on the training split. Preprocessing and calibration are fitted inside each split, and each metric is reported as mean, std, min and max. Every training row receives out-of-fold predictions, with fold and repeat recorded.
 - **Models:** Logistic Regression, Random Forest and XGBoost, each tested **raw, sigmoid-calibrated and isotonic-calibrated**, which makes 9 variants.
@@ -91,10 +91,10 @@ Full details are in [docs/methodology.md](docs/methodology.md), and every measur
 - ROC-AUC falls with age: 0.830 at 40–49 but **0.699 [0.678, 0.722] at 60–65**.
 - Mean predicted tracks prevalence in every group.
 
-No fairness claim is made.
+No fairness claim is made. Only gender and age bands could be examined, because the dataset records no other demographic variables.
 
 **Reliability and robustness:**
-- **Input conformity:** a Mahalanobis distance, fitted on training data only, flags about 1% of inputs as unusual.
+- **Input conformity:** a Mahalanobis distance, fitted and chosen on training data only, flags about 1% of inputs as unusual.
 - **Model disagreement:** across the three candidates, the median spread is 5 pp and the 95th percentile 17 pp.
 - **Synthetic shifts:** ranking drops to about 0.75 ROC-AUC in older or higher-blood-pressure populations, and a +10 mmHg recording offset inflates the mean estimate by 14 pp.
 
@@ -112,16 +112,16 @@ src/analysis.py         test-set analyses + data-quality report -> artifacts/ana
 src/reliability.py      calibration deep dive, OOF thresholds, novelty detector, stability, monotonicity,
                         disagreement -> artifacts/reliability.json; per-assessment reliability checks
 src/shift_analysis.py   synthetic distribution-shift experiment -> artifacts/shift_analysis.json
-src/prediction.py       input contract (PatientInput), artifact checks, calibrated prediction, demo inputs
+src/prediction.py       input contract (PatientInput), artifact checks, prediction, demo inputs
 src/explainability.py   exact SHAP (linear or TreeSHAP) on the model score, probability mapping, global importance
 src/what_if.py          guarded what-if scenarios and response curves
 src/recommendations.py  rule-based informational guidance, prototype bands, disclaimer
 app.py                  Streamlit entry point (top navigation)
 ui/core.py              design tokens, cached resources, shared components
 ui/{assess,explain,explore,model,methodology}.py   the five pages
-docs/                   methodology.md, evaluation.md, model_card.md
+docs/                   RESEARCH_VALIDATION.md, methodology.md, evaluation.md, model_card.md
 scripts/setup.sh        fresh-clone setup and full regeneration
-tests/                  155 tests (data, models, evaluation, selection, reliability, prediction, SHAP, what-if, guidance, UI)
+tests/                  156 tests (data, models, evaluation, selection, reliability, prediction, SHAP, what-if, guidance, UI)
 ```
 
 The rule-based guidance engine (`src/recommendations.py`) uses fixed, transparent rules on the user's inputs and the probability band, with no LLM. It never states a condition or names a treatment. A lower estimate is described as "does not rule out any health condition".
@@ -191,10 +191,10 @@ The dataset is not committed. `src/data_loader.py` downloads it from Kaggle's pu
 python -m pytest -q
 ```
 
-The suite contains 155 tests. It covers:
+The suite contains 156 tests. It covers:
 - metric definitions and invariants (threshold metrics are consistent, recall never rises with the threshold, net-benefit formula);
 - repeated CV (fixed seed, 25 disjoint splits, each row validated once per repeat) and out-of-fold leakage (a memorising model on random labels scores at chance);
-- test-set integrity: the final pipeline and calibrators are reproduced from training rows alone, the selection ignores scrambled test numbers, no threshold is tuned, and the novelty detector is fitted on training rows only;
+- test-set integrity: the final pipeline and calibrators are reproduced from training rows alone, the selection ignores scrambled test numbers, no threshold is tuned, and the novelty detector is fitted and chosen on training rows only;
 - the selection protocol reproducing the recorded decision and behaving correctly on synthetic inputs;
 - calibration statistics, reproducible calibration artifacts, bootstrap reproducibility and interval ordering, and subgroup "metric unavailable" handling;
 - input conformity (unusual inputs are flagged without blocking), deterministic perturbation and explanation-stability statistics, candidate-model disagreement, and a reproducible synthetic shift kept separate from validation;
