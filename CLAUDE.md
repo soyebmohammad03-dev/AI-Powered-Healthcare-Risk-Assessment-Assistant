@@ -1,6 +1,6 @@
 # CLAUDE.md — project constitution
 
-**AI-Powered Healthcare Risk Assessment Assistant.** This is an educational, explainable decision-support prototype built for the B.Tech course *Design of Artificial Intelligence Products*. Sole author: Soyeb Mohammad.
+**AI-Powered Healthcare Risk Assessment Assistant.** This is an educational, explainable decision-support prototype built for the B.Tech course *Design of Artificial Intelligence Products*. Sole author: Soyeb Mohammad. MIT licensed (`LICENSE`).
 
 It estimates the probability of the dataset label `cardio` from 11 self-reportable inputs. Around that estimate it shows exact SHAP explanations, what-if analysis, model analytics and per-assessment reliability signals.
 
@@ -20,7 +20,7 @@ It estimates the probability of the dataset label `cardio` from 11 self-reportab
 ```bash
 ./scripts/setup.sh                 # fresh clone -> venv, deps, dataset, missing models (~10 min first time)
 ./scripts/setup.sh --regenerate    # retrain + rebuild all artifacts
-.venv/bin/python -m pytest -q      # full suite (148 tests, ~35 s once models exist)
+.venv/bin/python -m pytest -q      # full suite (155 tests, ~35 s once models exist)
 .venv/bin/streamlit run app.py     # the app
 ```
 
@@ -74,5 +74,5 @@ The pipeline order is `src.train_models` → `src.analysis` → `src.reliability
 
 ## Status and roadmap
 
-- Phases 1–7 are complete. They covered data, models, SHAP, guidance, UI, rigorous evaluation and reliability, then reproducibility and public release.
+- Phases 1–8 are complete (Phase 8: product UX polish, MIT license). They covered data, models, SHAP, guidance, UI, rigorous evaluation and reliability, then reproducibility and public release.
 - Candidate future phases include external validation, a monotone-constrained XGBoost evaluated under the same protocol, and CI. **Do not start a phase unless asked.**

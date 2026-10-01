@@ -7,7 +7,7 @@ from src.data_loader import ROOT, SHA256
 
 def test_no_machine_specific_paths_in_tracked_files():
     files = subprocess.run(["git", "ls-files"], cwd=ROOT, capture_output=True, text=True, check=True).stdout.split()
-    offenders = [f for f in files if not f.endswith((".npz", ".joblib"))
+    offenders = [f for f in files if not f.endswith((".npz", ".joblib")) and f != "tests/test_portability.py"
                  and any(s in (ROOT / f).read_text(errors="ignore") for s in ("/Users/", "/home/", "C:\\Users"))]
     assert offenders == []
 

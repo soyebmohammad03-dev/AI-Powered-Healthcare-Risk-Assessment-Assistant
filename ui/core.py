@@ -81,6 +81,13 @@ h1 {{ letter-spacing: -0.02em; }}
 .step-n {{ font-size: .68rem; color: {t['primary']}; font-weight: 700; letter-spacing: .08em; }}
 .step-t {{ font-weight: 600; font-size: .92rem; color: {t['text']}; }}
 .step-d {{ font-size: .78rem; color: {t['muted']}; line-height: 1.35; margin-top: .15rem; }}
+.tagline {{ font-size: 1.15rem; font-weight: 600; color: {t['primary']}; margin: -.2rem 0 .6rem 0; }}
+.foot b {{ color: {t['muted']}; }}
+@media (max-width: 760px) {{
+  [data-testid="stMainBlockContainer"] {{ padding-top: 3.6rem !important; }}
+  .hero-number {{ font-size: 3rem; }}
+  .factor {{ grid-template-columns: 1fr 60px 36px; }}
+}}
 .foot {{ color: {t['faint']}; font-size: .8rem; border-top: 1px solid {t['border']}; padding-top: .8rem; margin-top: 2.5rem; }}
 </style>""")
 
@@ -254,5 +261,6 @@ def require_assessment():
 
 
 def footer():
-    st.html(f"<div class='foot'>{escape(DISCLAIMER)} Model estimates come from one public research dataset "
+    st.html(f"<div class='foot'><b>AI-Powered Healthcare Risk Assessment Assistant</b> · educational prototype, "
+            f"MIT licensed.<br>{escape(DISCLAIMER)} Model estimates come from one public research dataset "
             "and are not clinically validated.</div>")

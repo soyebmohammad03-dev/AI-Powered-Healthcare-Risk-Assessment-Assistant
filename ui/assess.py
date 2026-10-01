@@ -7,9 +7,9 @@ import streamlit as st
 from src.explainability import NEGATIVE, POSITIVE
 from src.prediction import DEMO_INPUTS, InvalidInputError, PatientInput, predict
 from src.preprocessing import CATEGORY_LABELS, FEATURE_LABELS, FEATURES, PLAUSIBLE
-from src.recommendations import Category, Priority, generate
+from src.recommendations import CLASS_THRESHOLD, DISCLAIMER, Category, Priority, generate, nearby_cutoffs
 from ui.core import (MODEL_NAMES, PAGES, band_bar, band_color, band_name, conformity, engine, factor_rows, footer,
-                     page_header, readable, section, tokens)
+                     note, page_header, readable, section, tokens)
 
 PRIORITY_COLORS = {Priority.HIGH: "red", Priority.MODERATE: "orange", Priority.LOW: "green", Priority.INFO: "gray"}
 
@@ -58,27 +58,33 @@ def input_form() -> bool:
                         icon=":material/restart_alt:")
 
         with st.form("assessment_form", border=False):
-            section("Person")
-            a, b, c, d = st.columns([1, 1, 1, 1.25])
-            with a:
-                number("age", "Age (years)", step=1,
-                       help="The training data covers ages 29–65, so only this range is accepted.")
-            with b:
-                number("height", "Height (cm)", step=1)
-            with c:
-                number("weight", "Weight (kg)", step=0.5, format="%.1f")
-            with d:
-                choice("gender")
             left, right = st.columns(2, gap="large")
             with left:
-                section("Vitals")
+                section("Demographics")
+                a, b = st.columns([1, 1.25])
+                with a:
+                    number("age", "Age (years)", step=1,
+                           help="The training data covers ages 29–65, so only this range is accepted.")
+                with b:
+                    choice("gender")
+            with right:
+                section("Body measurements")
+                a, b = st.columns(2)
+                with a:
+                    number("height", "Height (cm)", step=1, help="Used only to compute BMI with weight.")
+                with b:
+                    number("weight", "Weight (kg)", step=0.5, format="%.1f",
+                           help="Used only to compute BMI with height.")
+            left, right = st.columns(2, gap="large")
+            with left:
+                section("Blood pressure")
                 a, b = st.columns(2)
                 with a:
                     number("ap_hi", "Systolic (mmHg)", step=1, help="The upper blood-pressure number.")
                 with b:
                     number("ap_lo", "Diastolic (mmHg)", step=1, help="The lower blood-pressure number.")
             with right:
-                section("Labs")
+                section("Laboratory indicators")
                 choice("cholesterol", help="As reported by a test, relative to the normal range.")
                 choice("gluc", help="Blood glucose as reported by a test, relative to the normal range.")
             section("Lifestyle")
@@ -101,8 +107,9 @@ def run_assessment(bundle, explainer):
         st.error("Please check the following and try again:\n\n" + "\n".join(f"- {e}" for e in exc.errors),
                  icon=":material/warning:")
         return
-    result = predict(patient, bundle)
-    explanation = explainer.explain(patient)
+    with st.spinner("Computing the model estimate and its explanation…"):
+        result = predict(patient, bundle)
+        explanation = explainer.explain(patient)
     st.session_state["assessment"] = (patient, result, explanation, generate(patient, result, explanation))
 
 
@@ -123,6 +130,17 @@ def conformity_html(patient) -> tuple[str, str]:
         "cautiously. This is a statistical check, not a medical judgement.</div>")
 
 
+def near_cutoff_html(p: float) -> str:
+    cuts = nearby_cutoffs(p)
+    if not cuts:
+        return ""
+    names = " and ".join(f"the {c:.0%} {'classification threshold' if c == CLASS_THRESHOLD else 'band boundary'}"
+                         for c in cuts)
+    return (f"<div class='note'><b>Close to a cut-off.</b> This estimate is within a few percentage points of {names}. "
+            "Small changes to the inputs can move it across. The bands and the threshold are analytical choices "
+            "of this prototype, not clinical lines.</div>")
+
+
 def result_panel(bundle, patient, result, explanation):
     t = tokens()
     band = band_name(result.probability_positive)
@@ -130,7 +148,7 @@ def result_panel(bundle, patient, result, explanation):
     calibration = bundle.get("calibration", "none").capitalize()
     conformity_value, caution = conformity_html(patient)
     st.html(f"""
-<div class='hero-label'>Model estimate</div>
+<div class='hero-label'>Model-estimated probability</div>
 <div style='display:flex;align-items:flex-end;gap:1rem;flex-wrap:wrap'>
   <div class='hero-number'>{result.probability_positive:.1%}</div>
   <div style='padding-bottom:.7rem'>
@@ -141,6 +159,7 @@ def result_panel(bundle, patient, result, explanation):
 <div class='subtle' style='font-size:.9rem'>Model-estimated probability of the dataset's cardiovascular-disease
 label for these inputs. Not a diagnosis, and not a clinically validated individual risk.</div>
 {band_bar(result.probability_positive)}
+{near_cutoff_html(result.probability_positive)}
 {caution}
 <div class='meta-grid'>
   <div><div class='meta-k'>Model</div><div class='meta-v'>{MODEL_NAMES[result.model_name]}</div></div>
@@ -160,8 +179,18 @@ label for these inputs. Not a diagnosis, and not a clinically validated individu
             f"- **Reference baseline**: the model's estimate for an average record in the training data.\n"
             "- **Input conformity**: whether these inputs resemble the training data statistically. An unusual "
             "profile still gets an estimate, with a caution; see **Explain → Assessment reliability**.")
+    with st.expander("What the model does not know"):
+        st.markdown(
+            "- It sees **only these 11 inputs**. It knows nothing about medical history, family history, "
+            "medications, symptoms, precise lab values, ECG or any examination.\n"
+            "- It learned from **one public dataset** (ages 29–65) whose collection details are limited. It has "
+            "not been validated on any clinical population.\n"
+            "- Its estimate is a **pattern in that dataset**, not a measurement of your health. Candidate models "
+            "that fit the data almost equally well can disagree by several percentage points (see **Explain**).\n"
+            "- Any health question belongs with a qualified healthcare professional; this prototype is separate "
+            "from medical advice.")
 
-    section("How the model arrived here")
+    section("Why the model estimated this")
     up = [c for c in explanation.contributions if c.direction == POSITIVE][:3]
     down = [c for c in explanation.contributions if c.direction == NEGATIVE][:3]
     st.html(f"<div style='font-size:.82rem;font-weight:600;margin:.1rem 0 .1rem 0'>▲ Moved the estimate higher</div>"
@@ -176,7 +205,7 @@ label for these inputs. Not a diagnosis, and not a clinically validated individu
 
 
 def guidance_section(guidance):
-    section("General guidance")
+    section("What you can take from this: general guidance")
     st.caption("General information from fixed, transparent rules applied to your inputs. Not medical advice; "
                "following it is not a guarantee of any outcome.")
     items = [r for r in guidance.recommendations if r.category is not Category.MODEL_CONTEXT]
@@ -211,9 +240,11 @@ def summary_section(patient, result):
 
 
 page_header("Assess", "AI-Powered Healthcare Risk Assessment Assistant",
-            "Explainable cardiovascular risk estimation from structured health data.")
-st.html("<span class='chip'>Educational research prototype</span><span class='chip'>Not a diagnostic tool</span>"
+            "An Explainable AI-Based Human-Centered Healthcare Decision Support System")
+st.html("<div class='tagline'>AI that predicts — and explains why.</div>"
+        "<span class='chip'>Educational research prototype</span><span class='chip'>Not a diagnostic tool</span>"
         "<span class='chip'>Explainable by design</span>")
+note(f"<b>Not a medical device.</b> {DISCLAIMER}")
 bundle, explainer = engine()
 
 left, right = st.columns([2, 1], gap="large")
@@ -226,7 +257,7 @@ with right:
             patient, result, explanation, _ = st.session_state["assessment"]
             result_panel(bundle, patient, result, explanation)
         else:
-            st.html("<div class='hero-label'>Model estimate</div>"
+            st.html("<div class='hero-label'>Model-estimated probability</div>"
                     "<div class='hero-number subtle' style='opacity:.35'>—</div>")
             st.markdown("Enter the 11 inputs, or load a synthetic example, then select **Run Assessment**.\n\n"
                         "You will see the model-estimated probability, a prototype estimate band, the inputs that "

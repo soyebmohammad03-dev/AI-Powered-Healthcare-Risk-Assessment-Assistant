@@ -5,7 +5,7 @@ import streamlit as st
 from src.prediction import InvalidInputError
 from src.preprocessing import CATEGORY_LABELS, FEATURE_LABELS, PLAUSIBLE
 from src.what_if import ADJUSTABLE, changes_from, compare, response_curve
-from ui.core import (chart, engine, footer, kpis, note, page_header, readable, require_assessment, section,
+from ui.core import (MODEL_NAMES, artifact, chart, engine, footer, kpis, note, page_header, readable, require_assessment, section,
                      step_note, tokens)
 
 patient, result, _, _ = require_assessment()
@@ -64,7 +64,9 @@ with results:
 
     base, scen = outcome.baseline.probability_positive, outcome.scenario.probability_positive
     kpis([("Baseline", f"{base:.1%}", "your assessment"), ("Scenario", f"{scen:.1%}", "with the changes"),
-          ("Change", f"{outcome.delta_pp:+.1f} pp", "percentage points")])
+          ("Change", f"{outcome.delta_pp:+.1f} pp",
+           "higher than baseline" if outcome.delta_pp >= 0.05 else "lower than baseline"
+           if outcome.delta_pp <= -0.05 else "no change")])
     if outcome.changes:
         changed = ", ".join(f"{FEATURE_LABELS[k]} {readable(k, a)} → {readable(k, b)}"
                             for k, (a, b) in outcome.changes.items())
@@ -102,4 +104,13 @@ with results:
           xaxis_title=f"{FEATURE_LABELS[feature]} (other inputs as in your assessment)")
     st.caption("The curve varies only this input, holding every other input at your assessed values; values "
                f"that would be invalid (e.g. systolic not above diastolic) are omitted. {step_note(bundle)}")
+    mono = (artifact("reliability.json") or {}).get("monotonicity", {}).get("features", {}).get(feature)
+    counts = mono and mono["models"].get(bundle["model_name"], {}).get("counts")
+    if counts and counts["non-monotone"]:
+        n = sum(counts.values())
+        note(f"<b>Not always \"more is higher\".</b> In the robustness analysis, {MODEL_NAMES[bundle['model_name']]}'s "
+             f"estimate was non-monotone in {FEATURE_LABELS[feature].lower()} for {counts['non-monotone']} of {n} "
+             "tested profiles: raising this input sometimes lowered the estimate. Tree-based models can respond "
+             "non-linearly like this. It is model behaviour, not a medical effect; see "
+             "<b>Model → Robustness</b>.")
 footer()

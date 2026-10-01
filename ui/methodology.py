@@ -29,7 +29,8 @@ st.html("<div class='pipeline'>" + "".join(
     f"<div class='step'><div class='step-n'>{i:02d}</div><div class='step-t'>{name}</div>"
     f"<div class='step-d'>{desc}</div></div>" for i, (name, desc) in enumerate(STAGES, 1)) + "</div>")
 
-tabs = st.tabs(["Data quality lab", "Model card", "Validation strategy", "Limitations"])
+tabs = st.tabs(["Data quality lab", "Model card", "Validation strategy", "Limitations",
+                "Scope & human-centred design"])
 
 with tabs[0]:
     kpis([("Raw rows", f"{DQ['raw_rows']:,}", "as downloaded"),
@@ -125,5 +126,33 @@ with tabs[3]:
 - **Prototype bands and thresholds.** The <30/30–60/≥60% bands and the 0.50 threshold are presentation and
   analysis devices, not clinical cut-offs.
 - **Age coverage.** Inputs are restricted to ages 29–65, the range covered by the data.
+""")
+with tabs[4]:
+    note("<b>Non-clinical scope.</b> This is an educational prototype. It does not diagnose, screen, triage or "
+         "recommend treatment, and it is not affiliated with any hospital, clinic or medical institution. Any "
+         "health question belongs with a qualified healthcare professional.")
+    section("How the interface answers a user's questions")
+    st.dataframe(pd.DataFrame([
+        {"Question": "What does the system know?", "Where it is answered":
+         "Assess: the 11 inputs and their accepted ranges. Methodology: the dataset and cleaning rules."},
+        {"Question": "What does it predict?", "Where it is answered":
+         "Assess: a model-estimated probability of the dataset label, with a prototype band. It is not a diagnosis."},
+        {"Question": "Why does it predict that?", "Where it is answered":
+         "Assess: the top contributions. Explain: the full SHAP breakdown, in plain language and as a chart."},
+        {"Question": "What does it not know?", "Where it is answered":
+         "Assess: \"What the model does not know\". Limitations tab. Input conformity flags unusual profiles."},
+        {"Question": "Where is it uncertain?", "Where it is answered":
+         "Assess: near-cut-off notes. Explain: reliability signals. Model: bootstrap intervals, subgroups, robustness."},
+        {"Question": "What happens if inputs change?", "Where it is answered":
+         "Explore: model sensitivity only, including non-monotone responses. It never predicts a medical outcome."},
+    ]), hide_index=True, width="stretch")
+    st.markdown("""
+- **No pressure, no fear.** The app uses neutral wording and shows no alarms or countdowns. A caution never blocks
+  an estimate, and nothing asks the user to take a medical action.
+- **Separate signals.** Probability, band, threshold, conformity, stability and model disagreement are shown
+  separately. Combining them into one "trust score" would need arbitrary weights.
+- **Transparent rules.** The guidance comes from fixed, readable rules, with no language model and no named treatments.
+- **Accessible presentation.** Every coloured cue has a text label or a ▲/▼ marker. The app supports light and dark
+  themes and adapts its layout to narrow screens.
 """)
 footer()

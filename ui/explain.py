@@ -22,6 +22,23 @@ kpis([
     ("Difference", f"{(result.probability_positive - explanation.base_probability) * 100:+.1f} pp",
      "from baseline to this estimate"),
 ])
+
+
+def named(cs) -> str:
+    items = [f"{c.label} ({c.display_value})" for c in cs]
+    return " and ".join(items) if len(items) < 3 else ", ".join(items[:-1]) + " and " + items[-1]
+
+
+up = [c for c in explanation.contributions if c.direction == POSITIVE][:3]
+down = [c for c in explanation.contributions if c.direction == NEGATIVE][:3]
+section("In plain language")
+st.markdown(
+    f"The model starts from a **reference baseline of {explanation.base_probability:.1%}**, its estimate for an "
+    f"average record in the training data, and arrives at **{result.probability_positive:.1%}** for these inputs. "
+    + (f"The inputs that moved the estimate **higher** most were {named(up)}. " if up else "")
+    + (f"The inputs that moved it **lower** most were {named(down)}. " if down else "")
+    + "Contributions are measured on the model's internal score, so the chart below shows direction and "
+      "relative size, not percentage points.")
 note("<b>Model contribution ≠ medical causation.</b> These values show how the trained model weighted the "
      "supplied features. They describe model behaviour, not what causes cardiovascular disease.")
 

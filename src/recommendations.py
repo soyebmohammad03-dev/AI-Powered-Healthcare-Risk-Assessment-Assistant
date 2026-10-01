@@ -23,6 +23,13 @@ DISCLAIMER = (
 # not medical standards, and they do not change the model (predicted_class still uses 0.5).
 LOWER_BELOW = 0.30
 HIGHER_FROM = 0.60
+CLASS_THRESHOLD = 0.5  # predicted_class cut-off (prediction.predict)
+NEAR_CUTOFF = 0.03     # presentation choice: within 3 pp of a cut-off, small input changes can cross it
+
+
+def nearby_cutoffs(probability: float) -> list[float]:
+    """Band boundaries or the class threshold the estimate lies within NEAR_CUTOFF of."""
+    return [c for c in (LOWER_BELOW, CLASS_THRESHOLD, HIGHER_FROM) if abs(probability - c) < NEAR_CUTOFF]
 
 # Prototype rule triggers aligned with commonly cited reference points; not diagnostic cut-offs.
 SYSTOLIC_TRIGGER = 130   # mmHg } ACC/AHA 2017: the elevated/stage-1 range begins at 130 systolic

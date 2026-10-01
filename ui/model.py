@@ -34,6 +34,9 @@ def ci(value, interval) -> str:
 page_header("Model", "Model analytics",
             f"How the three candidate models compare, how trustworthy the probabilities are, and where the selected "
             f"model behaves differently. Test set: {A['test_rows']:,} held-out records.")
+note(f"<b>Scope of these numbers.</b> Every result on this page is read from this project's generated artifacts. "
+     f"It comes from one public dataset ({R['dataset']['clean_records']:,} cleaned records) and this project's "
+     "evaluation protocol. These are research measurements on that dataset, not clinical performance.")
 tabs = st.tabs(["Overview", "Calibration", "ROC & PR", "Thresholds", "Explainability", "Subgroups", "Uncertainty",
                 "Robustness"])
 

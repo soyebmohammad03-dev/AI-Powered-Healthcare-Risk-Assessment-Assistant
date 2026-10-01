@@ -171,3 +171,9 @@ def test_invalid_input_handling():
         generate(asdict(patient), predict(patient))
     with pytest.raises(ValueError, match="does not belong"):
         generate(replace(patient, ap_hi=150), predict(patient))
+
+
+def test_nearby_cutoffs():
+    from src.recommendations import nearby_cutoffs
+    assert nearby_cutoffs(0.10) == [] and nearby_cutoffs(0.45) == []
+    assert nearby_cutoffs(0.31) == [0.30] and nearby_cutoffs(0.49) == [0.5] and nearby_cutoffs(0.62) == [0.60]

@@ -9,7 +9,7 @@ from src import prediction
 from src.data_loader import ROOT
 from src.explainability import explain
 from src.prediction import DEMO_INPUTS, FINAL_MODEL_PATH, load_model, predict
-from src.recommendations import DISCLAIMER, Category, generate
+from src.recommendations import DISCLAIMER, Category, generate, nearby_cutoffs
 
 APP = str(ROOT / "app.py")
 
@@ -61,8 +61,10 @@ def test_assess_page_starts_with_grouped_form_and_disclaimer():
     at = start()
     text = page_text(at)
     assert "AI-Powered Healthcare Risk Assessment Assistant" in text
-    assert "Explainable cardiovascular risk estimation from structured health data." in text
-    for group in ("Person", "Vitals", "Labs", "Lifestyle"):
+    assert "An Explainable AI-Based Human-Centered Healthcare Decision Support System" in text
+    assert "AI that predicts — and explains why." in text
+    assert "Not a medical device." in text  # disclaimer above the form, not only in the footer
+    for group in ("Demographics", "Body measurements", "Blood pressure", "Laboratory indicators", "Lifestyle"):
         assert group in text
     assert {n.key for n in at.number_input} == {"age", "height", "weight", "ap_hi", "ap_lo"}
     assert {g.key for g in at.get("button_group")} == {"gender", "smoke", "alco", "active"}
@@ -83,13 +85,15 @@ def test_demo_assessment_end_to_end(label):
     assert f"{result.probability_positive:.1%}" in text                        # headline probability
     assert guidance.risk_category.name.upper() in text and "Prototype estimate band" in text
     assert "not a clinically validated" in text
-    assert "How the model arrived here" in text and "Model contribution ≠ medical causation" in text
+    assert "Why the model estimated this" in text and "Model contribution ≠ medical causation" in text
     assert load_model()["calibration"].capitalize() in text and "Reference baseline" in text  # secondary info
     assert "Input conformity" in text and "Within training distribution" in text
     for rec in guidance.recommendations:                                        # guidance
         if rec.category is not Category.MODEL_CONTEXT:
             assert rec.title in text
     assert "Assessment summary" in text and f"{result.bmi:.1f}" in text
+    assert "Model-estimated probability" in text and "What the model does not know" in [e.label for e in at.expander]
+    assert ("Close to a cut-off" in text) == bool(nearby_cutoffs(result.probability_positive))
     for internal in ("cat__", "num__", "ap_hi", "ap_lo", "gluc", "alco"):       # no internal names shown
         assert not re.search(rf"\b{internal}\b", text), internal
 
@@ -144,6 +148,7 @@ def test_explain_page():
     assert "Model contribution ≠ medical causation" in text
     assert len(at.get("plotly_chart")) == 1
     assert e.contributions[0].label in text
+    assert "In plain language" in text and f"reference baseline of {e.base_probability:.1%}" in text
 
 
 def test_explore_page_what_if_flow():
@@ -154,6 +159,8 @@ def test_explore_page_what_if_flow():
     at.slider(key="wi_ap_hi").set_value(150.0).run()
     text = page_text(at)
     assert "Under the model, changing" in text and "percentage points" in text
+    assert "higher than baseline" in text or "lower than baseline" in text
+    assert "non-monotone in systolic blood pressure" in text  # robustness finding surfaced, read from the artifact
     at.slider(key="wi_ap_lo").set_value(160.0).run()                    # impossible: diastolic > systolic
     assert "outside the validated input domain" in " ".join(e.value for e in at.error)
     next(b for b in at.button if b.label == "Reset to baseline").click().run()
@@ -171,6 +178,8 @@ def test_model_page_sections():
                     "Input conformity"):
         assert heading in text, heading
     assert len(at.get("plotly_chart")) >= 15
+    clean = load_json_artifact("metrics.json")["dataset"]["clean_records"]
+    assert f"{clean:,} cleaned records" in text and "not clinical performance" in text
     at.slider(key="threshold").set_value(0.3).run()
     assert not at.exception
     specs = " ".join(c.proto.spec for c in at.get("plotly_chart"))
@@ -184,3 +193,37 @@ def test_methodology_page_with_model_card():
         assert stage in text
     assert "Model card" in text and "Not intended for" in text and "Non-clinical status" in text
     assert "68,573" in text
+    assert "Non-clinical scope" in text and "What does it not know?" in " ".join(
+        str(d.value) for d in at.dataframe)
+
+
+def load_json_artifact(name: str) -> dict:
+    import json
+    return json.loads((ROOT / "artifacts" / name).read_text())
+
+
+def near_cutoff_patient():
+    """Example Patient B with systolic BP varied until the estimate sits near a cut-off."""
+    from dataclasses import replace
+    for ap_hi in range(100, 200):
+        p = replace(DEMO_INPUTS["Example Patient B"], ap_hi=ap_hi)
+        if nearby_cutoffs(predict(p).probability_positive):
+            return p
+    pytest.skip("no near-cut-off profile found")
+
+
+def test_near_cutoff_note_is_shown():
+    p = near_cutoff_patient()
+    at = start()
+    at.button(key="demo_Example Patient B").click().run()
+    at.number_input(key="ap_hi").set_value(p.ap_hi)
+    text = page_text(submit(at))
+    assert f"{predict(p).probability_positive:.1%}" in text and "Close to a cut-off" in text
+
+
+@pytest.mark.parametrize("page", ["assess", "explain", "explore", "model", "methodology"])
+def test_disclaimer_on_every_page(page):
+    at = assessed()
+    if page != "assess":
+        visit(at, page)
+    assert DISCLAIMER in page_text(at)
