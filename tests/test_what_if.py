@@ -1,7 +1,9 @@
 from dataclasses import asdict
 
+import joblib
 import pytest
 
+from src.data_loader import ROOT
 from src.prediction import DEMO_INPUTS, FINAL_MODEL_PATH, InvalidInputError, predict
 from src.preprocessing import PLAUSIBLE
 from src.what_if import ADJUSTABLE, build_scenario, changes_from, compare, response_curve
@@ -64,7 +66,10 @@ def test_response_curve_stays_in_valid_domain_and_contains_baseline():
     assert curve["probability"].between(0, 1).all()
     at_baseline = curve.loc[curve["value"] == B.ap_hi, "probability"].iloc[0]
     assert at_baseline == pytest.approx(predict(B).probability_positive)
-    assert curve["probability"].is_monotonic_increasing  # linear score + monotone calibration
+    # Monotonicity is a property of the linear candidate (linear score + monotone calibration), not of
+    # every model; the deployed tree model's non-monotone response is reported in reliability.json.
+    lr = {"pipeline": joblib.load(ROOT / "models" / "logistic_regression.joblib")}
+    assert response_curve(B, "ap_hi", lr)["probability"].is_monotonic_increasing
 
 
 def test_response_curve_rejects_other_features():

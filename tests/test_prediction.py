@@ -25,7 +25,7 @@ def bundle():
 
 
 def test_artifact_contains_full_pipeline(bundle):
-    assert bundle["model_name"] == "logistic_regression"
+    assert bundle["model_name"] == json.loads((ROOT / "artifacts" / "metrics.json").read_text())["final_model"]
     assert list(bundle["pipeline"].named_steps) == ["pre", "clf"]
     assert list(bundle["pipeline"].feature_names_in_) == FEATURES
 
@@ -59,7 +59,7 @@ def test_persisted_model_is_the_evaluated_model(bundle):
     got = evaluate(bundle["pipeline"], X_test, y_test)
     assert got == bundle["test_metrics"]
     saved = json.loads((ROOT / "artifacts" / "metrics.json").read_text())
-    assert got == pytest.approx(saved["models"]["logistic_regression"]["test"])
+    assert got == saved["models"][bundle["model_name"]]["test"]
 
 
 def test_inference_preprocessing_equals_training_preprocessing(bundle):

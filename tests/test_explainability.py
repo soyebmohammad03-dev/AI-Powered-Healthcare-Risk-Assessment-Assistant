@@ -2,6 +2,7 @@ import ast
 import math
 from dataclasses import asdict
 
+import joblib
 import numpy as np
 import pytest
 
@@ -43,7 +44,7 @@ def test_local_explanation_is_consistent_with_prediction(explainer, bundle, labe
     # Additivity: base + contributions == the logistic regression's own score (log-odds) ...
     assert e.base_value + sum(c.shap_value for c in e.contributions) == pytest.approx(e.model_output)
     Z = bundle["pipeline"].named_steps["pre"].transform(patient.to_frame())
-    assert e.model_output == pytest.approx(explainer.lr.decision_function(Z)[0])
+    assert e.model_output == pytest.approx(explainer.model_score(Z)[0], abs=1e-5)  # XGBoost: float32
     # ... and calibrating that score reproduces the prediction service exactly
     assert e.probability_positive == pytest.approx(p.probability_positive)
     assert explainer.score_to_probability(e.model_output) == pytest.approx(p.probability_positive)
@@ -52,9 +53,16 @@ def test_local_explanation_is_consistent_with_prediction(explainer, bundle, labe
     assert magnitudes == sorted(magnitudes, reverse=True)
 
 
-def test_shap_values_match_closed_form(explainer, bundle):
-    """Independent check (no SHAP): for a linear model, SHAP_j = coef_j * (x_j - mean_j over background)."""
-    pre, clf = bundle["pipeline"].named_steps["pre"], explainer.lr  # the LR inside the calibrator
+@pytest.fixture(scope="module")
+def lr_explainer():
+    return ModelExplainer({"pipeline": joblib.load(ROOT / "models" / "logistic_regression.joblib")})
+
+
+def test_shap_values_match_closed_form(lr_explainer):
+    """Independent check (no SHAP): for a linear model, SHAP_j = coef_j * (x_j - mean_j over background).
+    Runs on the Logistic Regression candidate, whichever model is final."""
+    explainer = lr_explainer
+    pre, clf = explainer.pre, explainer.clf  # the LR inside the calibrator
     background = pre.transform(split(load_dataset())[0])
     patient = DEMO_INPUTS["Example Patient C"]
     per_column = clf.coef_[0] * (pre.transform(patient.to_frame())[0] - background.mean(axis=0))
@@ -102,12 +110,12 @@ def test_invalid_input_rejected_same_as_prediction(explainer):
         explainer.explain(VALID)  # raw dict bypasses validation, so it is refused
 
 
-def test_non_linear_model_rejected(bundle):
-    from sklearn.ensemble import RandomForestClassifier
+def test_unsupported_model_rejected(bundle):
+    from sklearn.neighbors import KNeighborsClassifier
     from sklearn.pipeline import Pipeline
     fake = {**bundle, "pipeline": Pipeline([("pre", bundle["pipeline"].named_steps["pre"]),
-                                            ("clf", RandomForestClassifier())])}
-    with pytest.raises(ModelArtifactError, match="LogisticRegression"):
+                                            ("clf", KNeighborsClassifier())])}
+    with pytest.raises(ModelArtifactError, match="No exact SHAP explainer"):
         ModelExplainer(fake)
 
 
@@ -115,7 +123,7 @@ def test_no_hardcoded_shap_numbers():
     """The module must not contain float literals that could stand in for computed SHAP values."""
     tree = ast.parse((ROOT / "src" / "explainability.py").read_text())
     floats = {n.value for n in ast.walk(tree) if isinstance(n, ast.Constant) and isinstance(n.value, float)}
-    assert floats <= {0.0, 1.0}
+    assert floats <= {0.0, 1.0, 1e-5}  # 1e-5: documented TreeSHAP reconciliation tolerance
 
 
 def test_calibration_is_monotone_and_explained_separately(explainer):

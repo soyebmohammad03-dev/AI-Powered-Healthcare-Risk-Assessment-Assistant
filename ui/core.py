@@ -3,21 +3,24 @@
 No model logic here: everything numeric comes from src/ or the precomputed artifacts.
 """
 import json
+from dataclasses import astuple
 from html import escape
 from pathlib import Path
 
+import joblib
 import plotly.graph_objects as go
 import streamlit as st
 
-from src import prediction
+from src import prediction, reliability as rel
 from src.analysis import ARTIFACT
 from src.data_loader import ROOT
 from src.explainability import ModelExplainer
-from src.prediction import ModelArtifactError, load_model
+from src.prediction import ModelArtifactError, PatientInput, load_model
 from src.preprocessing import CATEGORY_LABELS
 from src.recommendations import DISCLAIMER, HIGHER_FROM, LOWER_BELOW
 
-TRAIN_COMMAND = "python -m src.train_models && python -m src.analysis"
+TRAIN_COMMAND = ("python -m src.train_models && python -m src.analysis && python -m src.reliability "
+                 "&& python -m src.shift_analysis")
 MODEL_NAMES = {"logistic_regression": "Logistic Regression", "random_forest": "Random Forest", "xgboost": "XGBoost"}
 UNITS = {"age": "years", "height": "cm", "weight": "kg", "ap_hi": "mmHg", "ap_lo": "mmHg"}
 PAGES = {}  # filled by app.py so pages can link to each other
@@ -119,6 +122,44 @@ def analysis() -> dict:
 
 def metrics_report() -> dict:
     return load_json(str(ROOT / "artifacts" / "metrics.json"))
+
+
+def artifact(name: str) -> dict | None:
+    path = ROOT / "artifacts" / name
+    return load_json(str(path)) if path.exists() else None
+
+
+@st.cache_resource(show_spinner=False)
+def candidates() -> dict:
+    return rel.load_candidates()
+
+
+@st.cache_resource(show_spinner=False)
+def detector():
+    return joblib.load(rel.DETECTOR_PATH) if rel.DETECTOR_PATH.exists() else None
+
+
+def conformity(patient: PatientInput) -> dict | None:
+    """Input-conformity check, or None if the detector has not been generated."""
+    det = detector()
+    return rel.input_conformity(patient, det) if det else None
+
+
+@st.cache_data(show_spinner=False, max_entries=64)
+def local_stability(values: tuple, _explainer, _pipeline) -> dict:
+    return rel.local_stability(PatientInput(*values), _explainer, _pipeline)
+
+
+def stability_for(patient: PatientInput, explainer) -> dict:
+    return local_stability(astuple(patient), explainer, explainer.pipeline)
+
+
+def step_note(bundle: dict) -> str:
+    """Why the model estimate moves in steps, for the final model actually deployed."""
+    if bundle["model_name"] == "logistic_regression":
+        return "Flat steps come from the isotonic calibration." if bundle["calibration"] == "isotonic" else ""
+    return ("Steps and dips come from the tree model's split points; blood pressures in this data cluster at "
+            "round values (40% of systolic readings are exactly 120 mmHg), so splits sit near them.")
 
 
 # ---- components -------------------------------------------------------------------------------

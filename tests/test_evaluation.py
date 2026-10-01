@@ -80,8 +80,8 @@ def test_oof_predictions_do_not_leak():
     X = pd.DataFrame(rng.normal(size=(600, 3)), columns=list("abc"))
     y = pd.Series(rng.integers(0, 2, 600))
     folds, oof = oof_cross_validate(KNeighborsClassifier(1), X, y, StratifiedKFold(5, shuffle=True, random_state=0))
-    assert not np.isnan(oof).any()
-    assert 0.4 < np.mean((oof >= 0.5) == y) < 0.6
+    assert oof.shape == (1, len(y)) and not np.isnan(oof).any()
+    assert 0.4 < np.mean((oof[0] >= 0.5) == y) < 0.6
     summary = summarize_folds(folds)
     assert len(summary["roc_auc"]["folds"]) == 5
     assert summary["roc_auc"]["mean"] == pytest.approx(np.mean(summary["roc_auc"]["folds"]))

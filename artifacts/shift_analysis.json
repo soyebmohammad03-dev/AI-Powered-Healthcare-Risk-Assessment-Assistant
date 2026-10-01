@@ -1,0 +1,613 @@
+{
+ "synthetic": true,
+ "kind": "Controlled distribution-shift experiment",
+ "note": "Synthetic perturbations of the held-out test set. Not a real-world or external validation.",
+ "rows": 13715,
+ "seed": 42,
+ "baseline": {
+  "logistic_regression": {
+   "roc_auc": 0.7929323941113472,
+   "pr_auc": 0.7695682437621544,
+   "brier": 0.18425689998201494,
+   "ece": 0.00510426401489123,
+   "mean_predicted": 0.4960450281393346,
+   "observed_rate": 0.4947867298578199
+  },
+  "random_forest": {
+   "roc_auc": 0.8020051661207523,
+   "pr_auc": 0.7758674784063262,
+   "brier": 0.1802790790916591,
+   "ece": 0.009004866814327312,
+   "mean_predicted": 0.4971029037886264,
+   "observed_rate": 0.4947867298578199
+  },
+  "xgboost": {
+   "roc_auc": 0.8041997551094748,
+   "pr_auc": 0.7845670319445359,
+   "brier": 0.17958341538906097,
+   "ece": 0.008447706420144337,
+   "mean_predicted": 0.4964192807674408,
+   "observed_rate": 0.4947867298578199
+  }
+ },
+ "population_mix": [
+  {
+   "feature": "age",
+   "label": "Age",
+   "beta": -1.0,
+   "feature_mean": 46.59424088146219,
+   "feature_mean_baseline": 53.2639737813108,
+   "metrics": {
+    "logistic_regression": {
+     "roc_auc": 0.826783611803496,
+     "pr_auc": 0.7384261909118842,
+     "brier": 0.15829712733104434,
+     "ece": 0.03371103573582796,
+     "mean_predicted": 0.37375362546014806,
+     "observed_rate": 0.36995989792198325
+    },
+    "random_forest": {
+     "roc_auc": 0.8400052786631936,
+     "pr_auc": 0.7481256921510046,
+     "brier": 0.15145100890537233,
+     "ece": 0.019603198596537308,
+     "mean_predicted": 0.3818411467976299,
+     "observed_rate": 0.36995989792198325
+    },
+    "xgboost": {
+     "roc_auc": 0.8424167934292413,
+     "pr_auc": 0.7565801337986018,
+     "brier": 0.15097716450691223,
+     "ece": 0.01508114558260588,
+     "mean_predicted": 0.37888243794441223,
+     "observed_rate": 0.36995989792198325
+    }
+   }
+  },
+  {
+   "feature": "age",
+   "label": "Age",
+   "beta": -0.5,
+   "feature_mean": 49.72798469278904,
+   "feature_mean_baseline": 53.2639737813108,
+   "metrics": {
+    "logistic_regression": {
+     "roc_auc": 0.8146354414285428,
+     "pr_auc": 0.7551982130417435,
+     "brier": 0.1712336632640494,
+     "ece": 0.017133296449146285,
+     "mean_predicted": 0.43194678430997235,
+     "observed_rate": 0.4304046664236238
+    },
+    "random_forest": {
+     "roc_auc": 0.8246781102477767,
+     "pr_auc": 0.7628045615283325,
+     "brier": 0.1663938489333691,
+     "ece": 0.009310997610358938,
+     "mean_predicted": 0.4363428370682419,
+     "observed_rate": 0.4304046664236238
+    },
+    "xgboost": {
+     "roc_auc": 0.8254755971670006,
+     "pr_auc": 0.7691663916547009,
+     "brier": 0.16645918786525726,
+     "ece": 0.011306737770227627,
+     "mean_predicted": 0.43508148193359375,
+     "observed_rate": 0.4304046664236238
+    }
+   }
+  },
+  {
+   "feature": "age",
+   "label": "Age",
+   "beta": 0.5,
+   "feature_mean": 56.38117370754953,
+   "feature_mean_baseline": 53.2639737813108,
+   "metrics": {
+    "logistic_regression": {
+     "roc_auc": 0.7700731529767393,
+     "pr_auc": 0.7820179071961655,
+     "brier": 0.19270931614691536,
+     "ece": 0.011163456024328708,
+     "mean_predicted": 0.5525098874358364,
+     "observed_rate": 0.5540648924535181
+    },
+    "random_forest": {
+     "roc_auc": 0.7765363239681377,
+     "pr_auc": 0.7828701446584059,
+     "brier": 0.1898200232030677,
+     "ece": 0.013527647871110993,
+     "mean_predicted": 0.5513342097762063,
+     "observed_rate": 0.5540648924535181
+    },
+    "xgboost": {
+     "roc_auc": 0.7796420689239085,
+     "pr_auc": 0.7901048662809278,
+     "brier": 0.1888345330953598,
+     "ece": 0.017038909176101753,
+     "mean_predicted": 0.5518043637275696,
+     "observed_rate": 0.5540648924535181
+    }
+   }
+  },
+  {
+   "feature": "age",
+   "label": "Age",
+   "beta": 1.0,
+   "feature_mean": 58.48266732343146,
+   "feature_mean_baseline": 53.2639737813108,
+   "metrics": {
+    "logistic_regression": {
+     "roc_auc": 0.7393990870143984,
+     "pr_auc": 0.7817149175513007,
+     "brier": 0.19995269695847345,
+     "ece": 0.025238729165767464,
+     "mean_predicted": 0.593376980345597,
+     "observed_rate": 0.5987604812249362
+    },
+    "random_forest": {
+     "roc_auc": 0.7460570371260099,
+     "pr_auc": 0.7835108031792548,
+     "brier": 0.19743552449786378,
+     "ece": 0.029002229261384935,
+     "mean_predicted": 0.5910025822678027,
+     "observed_rate": 0.5987604812249362
+    },
+    "xgboost": {
+     "roc_auc": 0.7466914052725436,
+     "pr_auc": 0.789915645670626,
+     "brier": 0.19718921184539795,
+     "ece": 0.025192160448626454,
+     "mean_predicted": 0.5918095707893372,
+     "observed_rate": 0.5987604812249362
+    }
+   }
+  },
+  {
+   "feature": "ap_hi",
+   "label": "Systolic blood pressure",
+   "beta": -1.0,
+   "feature_mean": 114.09478672985782,
+   "feature_mean_baseline": 126.62595698140721,
+   "metrics": {
+    "logistic_regression": {
+     "roc_auc": 0.7511748831802914,
+     "pr_auc": 0.6142298083364409,
+     "brier": 0.18000025318500518,
+     "ece": 0.012210189294920046,
+     "mean_predicted": 0.3267348239575598,
+     "observed_rate": 0.3321910317170981
+    },
+    "random_forest": {
+     "roc_auc": 0.7705707484043722,
+     "pr_auc": 0.6318528448447828,
+     "brier": 0.17447787828325212,
+     "ece": 0.010587456352786241,
+     "mean_predicted": 0.33989585792867466,
+     "observed_rate": 0.3321910317170981
+    },
+    "xgboost": {
+     "roc_auc": 0.7749206871175807,
+     "pr_auc": 0.6434680582414039,
+     "brier": 0.17353154718875885,
+     "ece": 0.015889926898492494,
+     "mean_predicted": 0.33649536967277527,
+     "observed_rate": 0.3321910317170981
+    }
+   }
+  },
+  {
+   "feature": "ap_hi",
+   "label": "Systolic blood pressure",
+   "beta": -0.5,
+   "feature_mean": 119.47225665329931,
+   "feature_mean_baseline": 126.62595698140721,
+   "metrics": {
+    "logistic_regression": {
+     "roc_auc": 0.7662315230626103,
+     "pr_auc": 0.6811489360576533,
+     "brier": 0.18731993823285709,
+     "ece": 0.00930257389052973,
+     "mean_predicted": 0.3967007699648739,
+     "observed_rate": 0.394896099161502
+    },
+    "random_forest": {
+     "roc_auc": 0.7854958922637189,
+     "pr_auc": 0.6975245219875037,
+     "brier": 0.1810454115289523,
+     "ece": 0.016887104378746357,
+     "mean_predicted": 0.4005018551087596,
+     "observed_rate": 0.394896099161502
+    },
+    "xgboost": {
+     "roc_auc": 0.7875489149713362,
+     "pr_auc": 0.7070202076395963,
+     "brier": 0.18046849966049194,
+     "ece": 0.014799180552988117,
+     "mean_predicted": 0.39900147914886475,
+     "observed_rate": 0.394896099161502
+    }
+   }
+  },
+  {
+   "feature": "ap_hi",
+   "label": "Systolic blood pressure",
+   "beta": 0.5,
+   "feature_mean": 137.69500546846518,
+   "feature_mean_baseline": 126.62595698140721,
+   "metrics": {
+    "logistic_regression": {
+     "roc_auc": 0.7990543996660642,
+     "pr_auc": 0.8278785196650705,
+     "brier": 0.16937448266737734,
+     "ece": 0.016123742291481252,
+     "mean_predicted": 0.614296890341731,
+     "observed_rate": 0.617134524243529
+    },
+    "random_forest": {
+     "roc_auc": 0.8047960483897387,
+     "pr_auc": 0.8299736779426705,
+     "brier": 0.16607791304325742,
+     "ece": 0.005580276989108703,
+     "mean_predicted": 0.616591370274052,
+     "observed_rate": 0.617134524243529
+    },
+    "xgboost": {
+     "roc_auc": 0.8078910007779596,
+     "pr_auc": 0.8340896770105649,
+     "brier": 0.1656394898891449,
+     "ece": 0.01162817568792899,
+     "mean_predicted": 0.6162790656089783,
+     "observed_rate": 0.617134524243529
+    }
+   }
+  },
+  {
+   "feature": "ap_hi",
+   "label": "Systolic blood pressure",
+   "beta": 1.0,
+   "feature_mean": 161.15421071819176,
+   "feature_mean_baseline": 126.62595698140721,
+   "metrics": {
+    "logistic_regression": {
+     "roc_auc": 0.7499411039563755,
+     "pr_auc": 0.8707518909195129,
+     "brier": 0.14207934161099284,
+     "ece": 0.026655903503536457,
+     "mean_predicted": 0.757285009891837,
+     "observed_rate": 0.7582938388625592
+    },
+    "random_forest": {
+     "roc_auc": 0.7428890532544379,
+     "pr_auc": 0.8602859319280913,
+     "brier": 0.13888295492461059,
+     "ece": 0.01651669780998276,
+     "mean_predicted": 0.7490467896480736,
+     "observed_rate": 0.7582938388625592
+    },
+    "xgboost": {
+     "roc_auc": 0.7486077271145144,
+     "pr_auc": 0.86339745820456,
+     "brier": 0.1397557109594345,
+     "ece": 0.025153395098423893,
+     "mean_predicted": 0.7460597157478333,
+     "observed_rate": 0.7582938388625592
+    }
+   }
+  },
+  {
+   "feature": "bmi",
+   "label": "BMI",
+   "beta": -1.0,
+   "feature_mean": 24.107573766953813,
+   "feature_mean_baseline": 27.511139656297498,
+   "metrics": {
+    "logistic_regression": {
+     "roc_auc": 0.7931700708435688,
+     "pr_auc": 0.72189715274893,
+     "brier": 0.1790889829765481,
+     "ece": 0.017434205449872866,
+     "mean_predicted": 0.4225253429289045,
+     "observed_rate": 0.412759752096245
+    },
+    "random_forest": {
+     "roc_auc": 0.8004117959821375,
+     "pr_auc": 0.727345840434154,
+     "brier": 0.176034286068933,
+     "ece": 0.014136540267443697,
+     "mean_predicted": 0.42252164372710355,
+     "observed_rate": 0.412759752096245
+    },
+    "xgboost": {
+     "roc_auc": 0.8032449180362531,
+     "pr_auc": 0.7377246182971515,
+     "brier": 0.1749628335237503,
+     "ece": 0.009303595558640028,
+     "mean_predicted": 0.42117518186569214,
+     "observed_rate": 0.412759752096245
+    }
+   }
+  },
+  {
+   "feature": "bmi",
+   "label": "BMI",
+   "beta": -0.5,
+   "feature_mean": 25.434909258461865,
+   "feature_mean_baseline": 27.511139656297498,
+   "metrics": {
+    "logistic_regression": {
+     "roc_auc": 0.8026725157015256,
+     "pr_auc": 0.763513179921774,
+     "brier": 0.1786058479574659,
+     "ece": 0.012673717309517184,
+     "mean_predicted": 0.45536915944029777,
+     "observed_rate": 0.45519504192489973
+    },
+    "random_forest": {
+     "roc_auc": 0.8087714557220576,
+     "pr_auc": 0.7675440347981888,
+     "brier": 0.17573862227445955,
+     "ece": 0.009739373008197301,
+     "mean_predicted": 0.45711557275720255,
+     "observed_rate": 0.45519504192489973
+    },
+    "xgboost": {
+     "roc_auc": 0.8109265353641475,
+     "pr_auc": 0.772886609360842,
+     "brier": 0.17506155371665955,
+     "ece": 0.00933073765597899,
+     "mean_predicted": 0.4559096395969391,
+     "observed_rate": 0.45519504192489973
+    }
+   }
+  },
+  {
+   "feature": "bmi",
+   "label": "BMI",
+   "beta": 0.5,
+   "feature_mean": 31.302601011952003,
+   "feature_mean_baseline": 27.511139656297498,
+   "metrics": {
+    "logistic_regression": {
+     "roc_auc": 0.7969072978049421,
+     "pr_auc": 0.8014146530289387,
+     "brier": 0.18134314886264974,
+     "ece": 0.0160742110267423,
+     "mean_predicted": 0.5596043631856957,
+     "observed_rate": 0.5512212905577835
+    },
+    "random_forest": {
+     "roc_auc": 0.8043573964471609,
+     "pr_auc": 0.8068888747980951,
+     "brier": 0.17739948374762038,
+     "ece": 0.013099053025812614,
+     "mean_predicted": 0.5555206773982864,
+     "observed_rate": 0.5512212905577835
+    },
+    "xgboost": {
+     "roc_auc": 0.8061584765687122,
+     "pr_auc": 0.8141988205694141,
+     "brier": 0.17694635689258575,
+     "ece": 0.01011027606992534,
+     "mean_predicted": 0.5542542338371277,
+     "observed_rate": 0.5512212905577835
+    }
+   }
+  },
+  {
+   "feature": "bmi",
+   "label": "BMI",
+   "beta": 1.0,
+   "feature_mean": 39.00291678842186,
+   "feature_mean_baseline": 27.511139656297498,
+   "metrics": {
+    "logistic_regression": {
+     "roc_auc": 0.7372111057618528,
+     "pr_auc": 0.7771274854628989,
+     "brier": 0.19755628110591336,
+     "ece": 0.03884111854842868,
+     "mean_predicted": 0.6468414698413959,
+     "observed_rate": 0.6163324826831936
+    },
+    "random_forest": {
+     "roc_auc": 0.7456949448788823,
+     "pr_auc": 0.7915915381691355,
+     "brier": 0.19290056001475772,
+     "ece": 0.061288724435511005,
+     "mean_predicted": 0.6204306812194477,
+     "observed_rate": 0.6163324826831936
+    },
+    "xgboost": {
+     "roc_auc": 0.7465620260898423,
+     "pr_auc": 0.7960778094674089,
+     "brier": 0.19298304617404938,
+     "ece": 0.038348346621591235,
+     "mean_predicted": 0.618549644947052,
+     "observed_rate": 0.6163324826831936
+    }
+   }
+  }
+ ],
+ "measurement_offset": [
+  {
+   "label": "Blood pressure recorded 10 mmHg lower",
+   "dropped_invalid": 2,
+   "metrics": {
+    "logistic_regression": {
+     "roc_auc": 0.7926274632774035,
+     "pr_auc": 0.7685707453840906,
+     "brier": 0.20522560446079963,
+     "ece": 0.12372179299726156,
+     "mean_predicted": 0.37121002352720434,
+     "observed_rate": 0.49478596951797565
+    },
+    "random_forest": {
+     "roc_auc": 0.7915339863780483,
+     "pr_auc": 0.7677359854511651,
+     "brier": 0.19808461453489687,
+     "ece": 0.09768304388278373,
+     "mean_predicted": 0.39710292563519184,
+     "observed_rate": 0.49478596951797565
+    },
+    "xgboost": {
+     "roc_auc": 0.7927860797064575,
+     "pr_auc": 0.7746567818908593,
+     "brier": 0.19681629538536072,
+     "ece": 0.09286763019029051,
+     "mean_predicted": 0.40191832184791565,
+     "observed_rate": 0.49478596951797565
+    }
+   }
+  },
+  {
+   "label": "Blood pressure recorded 5 mmHg higher",
+   "dropped_invalid": 0,
+   "metrics": {
+    "logistic_regression": {
+     "roc_auc": 0.7928180283560718,
+     "pr_auc": 0.7679991215220444,
+     "brier": 0.19104143780056165,
+     "ece": 0.0690648392048075,
+     "mean_predicted": 0.5638515690626273,
+     "observed_rate": 0.4947867298578199
+    },
+    "random_forest": {
+     "roc_auc": 0.8003278548786932,
+     "pr_auc": 0.7737763828266674,
+     "brier": 0.18200662257178232,
+     "ece": 0.02438402540759675,
+     "mean_predicted": 0.5191707552654167,
+     "observed_rate": 0.4947867298578199
+    },
+    "xgboost": {
+     "roc_auc": 0.8026174349684733,
+     "pr_auc": 0.7815226437564787,
+     "brier": 0.18041257560253143,
+     "ece": 0.012047106867457155,
+     "mean_predicted": 0.49882012605667114,
+     "observed_rate": 0.4947867298578199
+    }
+   }
+  },
+  {
+   "label": "Blood pressure recorded 10 mmHg higher",
+   "dropped_invalid": 0,
+   "metrics": {
+    "logistic_regression": {
+     "roc_auc": 0.7928511524218722,
+     "pr_auc": 0.7674750412300829,
+     "brier": 0.20987249159197302,
+     "ece": 0.13497743832809264,
+     "mean_predicted": 0.6297641681859125,
+     "observed_rate": 0.4947867298578199
+    },
+    "random_forest": {
+     "roc_auc": 0.7820535789367438,
+     "pr_auc": 0.7483311303478978,
+     "brier": 0.2194655768316408,
+     "ece": 0.15321613979211438,
+     "mean_predicted": 0.6480028696499344,
+     "observed_rate": 0.4947867298578199
+    },
+    "xgboost": {
+     "roc_auc": 0.785303884539481,
+     "pr_auc": 0.7636059269543075,
+     "brier": 0.21398527920246124,
+     "ece": 0.14285481292815527,
+     "mean_predicted": 0.6376415491104126,
+     "observed_rate": 0.4947867298578199
+    }
+   }
+  },
+  {
+   "label": "Weight recorded 5% lower",
+   "dropped_invalid": 0,
+   "metrics": {
+    "logistic_regression": {
+     "roc_auc": 0.7929692187148357,
+     "pr_auc": 0.7697681948407109,
+     "brier": 0.18435591899746365,
+     "ece": 0.008042806164699818,
+     "mean_predicted": 0.4881301461886273,
+     "observed_rate": 0.4947867298578199
+    },
+    "random_forest": {
+     "roc_auc": 0.8022294314651276,
+     "pr_auc": 0.7759111329165381,
+     "brier": 0.18033620354941038,
+     "ece": 0.00933666887145863,
+     "mean_predicted": 0.4897892478013684,
+     "observed_rate": 0.4947867298578199
+    },
+    "xgboost": {
+     "roc_auc": 0.8034286183506603,
+     "pr_auc": 0.7825317069850358,
+     "brier": 0.17997272312641144,
+     "ece": 0.009607914064080873,
+     "mean_predicted": 0.48743242025375366,
+     "observed_rate": 0.4947867298578199
+    }
+   }
+  },
+  {
+   "label": "Weight recorded 5% higher",
+   "dropped_invalid": 4,
+   "metrics": {
+    "logistic_regression": {
+     "roc_auc": 0.793159460196088,
+     "pr_auc": 0.7692421264909634,
+     "brier": 0.18435897996036918,
+     "ece": 0.009406027680253594,
+     "mean_predicted": 0.5036819638903173,
+     "observed_rate": 0.49478520895631245
+    },
+    "random_forest": {
+     "roc_auc": 0.8017211286638829,
+     "pr_auc": 0.7752942435303111,
+     "brier": 0.18039972704164142,
+     "ece": 0.010946633648910745,
+     "mean_predicted": 0.5033250910757562,
+     "observed_rate": 0.49478520895631245
+    },
+    "xgboost": {
+     "roc_auc": 0.8037439824783252,
+     "pr_auc": 0.784157396083191,
+     "brier": 0.17965395748615265,
+     "ece": 0.010505026025828944,
+     "mean_predicted": 0.5031316876411438,
+     "observed_rate": 0.49478520895631245
+    }
+   }
+  },
+  {
+   "label": "Age recorded 3 years higher",
+   "dropped_invalid": 1314,
+   "metrics": {
+    "logistic_regression": {
+     "roc_auc": 0.7936791146045733,
+     "pr_auc": 0.7612058685046312,
+     "brier": 0.18497966029635696,
+     "ece": 0.03452804681613568,
+     "mean_predicted": 0.5066673904174581,
+     "observed_rate": 0.4721393436013225
+    },
+    "random_forest": {
+     "roc_auc": 0.8013263945909432,
+     "pr_auc": 0.7666063819932238,
+     "brier": 0.18095180195140487,
+     "ece": 0.03644541670377909,
+     "mean_predicted": 0.5085847603051015,
+     "observed_rate": 0.4721393436013225
+    },
+    "xgboost": {
+     "roc_auc": 0.8013663535439794,
+     "pr_auc": 0.7729987771664342,
+     "brier": 0.1816176325082779,
+     "ece": 0.03974118418543966,
+     "mean_predicted": 0.5118805170059204,
+     "observed_rate": 0.4721393436013225
+    }
+   }
+  }
+ ]
+}

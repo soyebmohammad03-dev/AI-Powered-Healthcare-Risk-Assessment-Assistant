@@ -5,7 +5,8 @@ import streamlit as st
 from src.prediction import InvalidInputError
 from src.preprocessing import CATEGORY_LABELS, FEATURE_LABELS, PLAUSIBLE
 from src.what_if import ADJUSTABLE, changes_from, compare, response_curve
-from ui.core import chart, engine, footer, kpis, note, page_header, readable, require_assessment, section, tokens
+from ui.core import (chart, engine, footer, kpis, note, page_header, readable, require_assessment, section,
+                     step_note, tokens)
 
 patient, result, _, _ = require_assessment()
 bundle, _ = engine()
@@ -80,8 +81,8 @@ with results:
                 hovertemplate="%{y}: %{text}<extra></extra>"))
             chart(fig, height=60 + 40 * len(items), showlegend=False, xaxis_title="change in percentage points",
                   margin=dict(l=8, r=60, t=10, b=40))
-            st.caption("Single-change effects need not add up to the combined change: the calibrated "
-                       "probability is a step function, and effects combine on the model's internal score.")
+            st.caption("Single-change effects need not add up to the combined change: effects combine on the "
+                       "model's internal score, and the probability is not linear in it.")
     else:
         st.markdown("Adjust a scenario input to compare it with your assessment.")
 
@@ -100,6 +101,5 @@ with results:
     chart(fig, height=320, yaxis_tickformat=".0%", yaxis_range=[0, 1],
           xaxis_title=f"{FEATURE_LABELS[feature]} (other inputs as in your assessment)")
     st.caption("The curve varies only this input, holding every other input at your assessed values; values "
-               "that would be invalid (e.g. systolic not above diastolic) are omitted. Flat steps come from the "
-               "isotonic calibration.")
+               f"that would be invalid (e.g. systolic not above diastolic) are omitted. {step_note(bundle)}")
 footer()

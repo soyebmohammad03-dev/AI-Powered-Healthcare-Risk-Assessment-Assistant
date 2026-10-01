@@ -18,12 +18,12 @@ STAGES = [
     ("Cleaning", f"Documented data-quality rules remove {DQ['removed_rows']:,} implausible or duplicate rows."),
     ("Feature engineering", "Age in years; BMI from height and weight. Nothing else derived."),
     ("Preprocessing", "Scaling and one-hot encoding inside the model pipeline, fit on training data only."),
-    ("Cross-validation", "Stratified 80/20 split; 5-fold CV on the training split for every comparison."),
-    ("Model training", "Logistic Regression, Random Forest and XGBoost."),
-    ("Calibration", "Raw, sigmoid and isotonic variants; calibrators fit inside each training fold."),
-    ("Evaluation", "8 metrics, thresholds, subgroups and bootstrap intervals on the untouched test set."),
-    ("Explainability", "Exact SHAP, permutation importance, partial dependence, interactions, what-if."),
-    ("Human-centred interface", "Plain-language results, prototype bands, guidance and limitations."),
+    ("Cross-validation", "Stratified 80/20 split; 5-fold CV repeated 5 times (25 splits) on the training split."),
+    ("Model training", "Logistic Regression, Random Forest and XGBoost, each raw, sigmoid and isotonic."),
+    ("Selection", "Pre-declared protocol: corrected resampled t-tests, no tunable margins, test set unused."),
+    ("Evaluation & reliability", "Test-set metrics with bootstrap intervals, subgroups, conformity, stability, shift."),
+    ("Explainability", "Exact SHAP (linear or TreeSHAP), permutation importance, partial dependence, what-if."),
+    ("Human-centred interface", "Plain-language results, prototype bands, reliability signals and limitations."),
 ]
 st.html("<div class='pipeline'>" + "".join(
     f"<div class='step'><div class='step-n'>{i:02d}</div><div class='step-t'>{name}</div>"
@@ -87,32 +87,39 @@ with tabs[1]:
 with tabs[2]:
     st.markdown(f"""
 - **Split:** stratified 80/20, seed {R['seed']}: {R['split']['train']:,} training and {R['split']['test']:,} test
-  records. The test set is used once per model, after all choices are made.
-- **Cross-validation:** stratified 5-fold on the training split. Every learned step (scaler, encoder, model,
-  calibrator) is fit inside each training fold; calibrators use a further internal 3-fold split, so no
-  out-of-fold probability comes from a model that saw that record.
-- **Metrics:** accuracy, precision, recall and F1 at 0.50; ROC-AUC and PR-AUC for ranking; log loss and Brier
-  for probability quality. Selection never uses accuracy alone or the test set.
-- **Calibration:** raw, sigmoid (Platt) and isotonic variants of every model are compared on out-of-fold
-  Brier and log loss.
+  records. The test set is scored once per model, after selection; no threshold, calibrator or detector is fit on it.
+- **Cross-validation:** stratified 5-fold repeated 5 times (`RepeatedStratifiedKFold`, seed {R['seed']}) on the
+  training split, 25 splits per variant. Every learned step (scaler, encoder, model, calibrator) is fit inside
+  each training fold; calibrators use a further internal 3-fold split, so no out-of-fold probability comes from
+  a model or calibrator that saw that record.
+- **Selection protocol:** declared before the repeated-CV run; corrected resampled t-tests at α = 0.05, keeping
+  the more interpretable model unless the next is significantly better on both ROC-AUC and Brier. It replaces
+  earlier margins that were set after seeing results.
+- **Metrics:** accuracy, precision, recall and F1 at 0.50; ROC-AUC and PR-AUC for ranking; log loss, Brier,
+  ECE and calibration slope/intercept for probability quality.
 - **Uncertainty:** paired percentile bootstrap (1,000 resamples) on test predictions.
-- **Subgroups:** gender and age bands 29–39, 40–49, 50–59, 60–65; groups with fewer than 30 records of either
-  class would be reported without metrics.
-- **Explainability:** exact SHAP for the logistic-regression score; permutation importance (ROC-AUC, 10
-  repeats, test set); partial dependence and ICE on 2,000 test records restricted to valid inputs; XGBoost
-  SHAP interaction values on 1,000 test records.
-- **Reproduce:** `python -m src.train_models && python -m src.analysis`. Detailed numbers: `docs/evaluation.md`.
+- **Subgroups:** gender and age bands 29–39, 40–49, 50–59, 60–65, with within-group bootstrap intervals;
+  groups with fewer than 30 records of either class are reported without metrics.
+- **Reliability:** input conformity (Mahalanobis distance, fit on training rows only), prediction and
+  explanation stability under ±1–5% input changes, monotonicity checks, model disagreement, and a synthetic
+  distribution-shift experiment.
+- **Reproduce:** `python -m src.train_models && python -m src.analysis && python -m src.reliability &&
+  python -m src.shift_analysis`. Detailed numbers: `docs/evaluation.md`.
 """)
 
 with tabs[3]:
     st.markdown("""
-- **Not clinically validated.** One public dataset with limited provenance; about 0.79 ROC-AUC. Calibration
+- **Not clinically validated.** One public dataset with limited provenance; about 0.80 ROC-AUC. Calibration
   aligns probabilities with this dataset's labels, not with any clinical population.
+- **Step-wise, non-monotone final model.** XGBoost's estimate can jump by many percentage points for a 1–2%
+  input change near a split point, and it is not monotone in blood pressure, age or weight for every profile.
+- **Explanations are less stable than with a linear model.** Small input changes alter XGBoost's top-5
+  contributions more often than Logistic Regression's.
 - **Self-reported and coarse inputs.** Smoking, alcohol and activity are self-reported; cholesterol and glucose
   are three-level categories, not lab values.
 - **Confounded patterns.** Smoking and alcohol show slightly lower label rates in this data, so the model can
   move the estimate lower for them. This is model behaviour, never medical evidence.
-- **Weaker in older ages.** ROC-AUC is about 0.69 for ages 60–65 versus about 0.82 for 40–49.
+- **Weaker in older ages.** ROC-AUC is about 0.70 for ages 60–65 versus about 0.83 for 40–49.
 - **Explanations describe the model.** SHAP, permutation importance, partial dependence and what-if results are
   about this trained model, not about causes of disease. Correlated inputs (systolic/diastolic) share credit.
 - **Prototype bands and thresholds.** The <30/30–60/≥60% bands and the 0.50 threshold are presentation and

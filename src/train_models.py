@@ -1,37 +1,54 @@
-"""Train and compare Logistic Regression, Random Forest and XGBoost, each raw and calibrated.
+"""Train and compare Logistic Regression, Random Forest and XGBoost, each raw and calibrated, with
+5x5 repeated stratified CV, and choose the final model with the pre-declared protocol below.
 
-Run: python -m src.train_models   (then python -m src.analysis for the post-hoc analyses)
+Run: python -m src.train_models   (about 20 min; then src.analysis, src.reliability, src.shift_analysis)
 """
 import json
 
 import joblib
+import numpy as np
 import sklearn
 import xgboost
 from sklearn.base import clone
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import StratifiedKFold
+from sklearn.model_selection import RepeatedStratifiedKFold
 from sklearn.pipeline import Pipeline
 from xgboost import XGBClassifier
 
 from src.data_loader import ROOT, SEED, SOURCE, TARGET, clean, load_raw, split
-from src.evaluate_models import (CV_SCORING, calibration_data, evaluate, full_metrics, oof_cross_validate,
-                                 summarize_folds)
+from src.evaluate_models import (CV_SCORING, calibration_data, calibration_stats, corrected_resampled_ttest,
+                                 evaluate, fold_assignment, full_metrics, oof_cross_validate, summarize_folds)
 from src.prediction import FINAL_MODEL_PATH
 from src.preprocessing import CATEGORICAL, CATEGORIES, FEATURES, MODEL_FEATURES, NUMERIC, build_preprocessor
 
 MODELS_DIR = ROOT / "models"
 ARTIFACTS_DIR = ROOT / "artifacts"
+OOF_PATH = ARTIFACTS_DIR / "oof_predictions.npz"  # generated, not committed (about 10 MB)
 VARIANTS = ["raw", "sigmoid", "isotonic"]  # raw probabilities, Platt scaling, isotonic regression
-FINAL_MODEL = "logistic_regression"  # what the explainer supports; asserted against the framework below
-FINAL_VARIANT = "isotonic"
-# Selection framework (decided on 5-fold CV of the training split; the test set is never used to choose).
-# Margins were fixed in the upgrade phase, after the Phase 1 comparison was known; they are judgement
-# calls about practical relevance, stated so they can be challenged, not statistically derived.
+N_FOLDS, N_REPEATS = 5, 5
+
+# ---- Model-selection protocol (declared in Phase 6 BEFORE the repeated-CV comparison was run) -----------
+# It replaces the previous margins (0.02 ROC-AUC, 0.001 Brier; commit da15801), which were set after the
+# first comparison was known. There are no tunable margins: every comparison is a corrected resampled t-test on the SAME 25
+# repeated-CV splits of the training data, at the conventional ALPHA. The test set is never used.
+#   1. Calibration (per model): keep raw probabilities unless a calibrator lowers CV Brier significantly;
+#      if both do, take the lower mean Brier.
+#   2. Explanation-quality gate: a model is eligible only if an exact, additive SHAP explanation of its
+#      internal score exists and the score maps to the displayed probability monotonically. (All three pass.)
+#   3. Model: start from the most interpretable model and move to the next one only if it is significantly
+#      better on BOTH discrimination (ROC-AUC, higher) AND probability quality (Brier, lower). The test
+#      accounts for split-to-split variability, so a model that wins only in some splits does not qualify;
+#      split stability (std, min, max) is reported alongside.
+# The author had seen the earlier single 5-fold results; the protocol is therefore not blind, but it
+# contains no number that can be set to favour a particular model.
+ALPHA = 0.05
 INTERPRETABILITY_ORDER = ["logistic_regression", "random_forest", "xgboost"]  # most to least transparent
-AUC_MARGIN = 0.02     # a less interpretable model must beat the more interpretable one by this CV ROC-AUC
-BRIER_MARGIN = 0.001  # a calibrator must lower mean CV Brier by this much, and in every fold
+EXPLAINABLE = {"logistic_regression": "exact linear SHAP on log-odds",
+               "random_forest": "exact TreeSHAP on probability",
+               "xgboost": "exact TreeSHAP on log-odds"}
+TEST_FRACTION = 1 / N_FOLDS
 
 
 def build_models() -> dict:
@@ -60,33 +77,36 @@ def build_variant(pipeline: Pipeline, variant: str) -> Pipeline:
                                                     cv=3, ensemble=False))])
 
 
-def choose_variant(variants: dict) -> tuple[str, str]:
-    raw = variants["raw"]["cv"]["brier"]
-    for name in ("sigmoid", "isotonic"):
-        cal = variants[name]["cv"]["brier"]
-        gain = raw["mean"] - cal["mean"]
-        if gain >= BRIER_MARGIN and all(c < r for c, r in zip(cal["folds"], raw["folds"])):
-            return name, f"{name} calibration lowered mean CV Brier by {gain:.4f} and in every fold."
-    best = min(("sigmoid", "isotonic"), key=lambda v: variants[v]["cv"]["brier"]["mean"])
-    change = variants[best]["cv"]["brier"]["mean"] - raw["mean"]
-    return "raw", (f"Calibration not material: best calibrator ({best}) changed mean CV Brier by {change:+.4f} "
-                   f"(needs <= -{BRIER_MARGIN} and lower in every fold); raw probabilities kept.")
+def choose_variant(variants: dict) -> tuple[str, str, dict]:
+    """Protocol step 1. Returns (variant, reason, tests)."""
+    raw = variants["raw"]["cv"]["brier"]["folds"]
+    tests = {v: corrected_resampled_ttest(variants[v]["cv"]["brier"]["folds"], raw, TEST_FRACTION)
+             for v in ("sigmoid", "isotonic")}
+    better = [v for v, t in tests.items() if t["mean_difference"] < 0 and t["p_value"] < ALPHA]
+    describe = "; ".join(f"{v} {t['mean_difference']:+.4f} (p={t['p_value']:.2g})" for v, t in tests.items())
+    if better:
+        best = min(better, key=lambda v: variants[v]["cv"]["brier"]["mean"])
+        return best, f"{best} calibration significantly lowered CV Brier vs raw [{describe}].", tests
+    return "raw", f"No calibrator significantly lowered CV Brier vs raw [{describe}]; raw kept.", tests
 
 
 def select_final(comparison: dict) -> dict:
-    """Walk from most to least interpretable; move on only for a material CV discrimination gain."""
-    chosen = INTERPRETABILITY_ORDER[0]
-    steps = []
-    for other in INTERPRETABILITY_ORDER[1:]:
-        a = comparison[chosen]["selected"]
-        b = comparison[other]["selected"]
-        auc_gain = comparison[other][b]["cv"]["roc_auc"]["mean"] - comparison[chosen][a]["cv"]["roc_auc"]["mean"]
-        brier_change = comparison[other][b]["cv"]["brier"]["mean"] - comparison[chosen][a]["cv"]["brier"]["mean"]
-        switch = auc_gain >= AUC_MARGIN and brier_change <= 0
-        steps.append(f"{other} vs {chosen}: CV ROC-AUC {auc_gain:+.4f}, CV Brier {brier_change:+.4f} -> "
-                     f"{'switch' if switch else 'keep ' + chosen} (margin {AUC_MARGIN}).")
+    """Protocol steps 2-3: walk from most to least interpretable; switch only for a significant gain in both
+    CV ROC-AUC and CV Brier over the current choice (each model in its selected variant)."""
+    eligible = [m for m in INTERPRETABILITY_ORDER if m in EXPLAINABLE]
+    chosen, steps, tests = eligible[0], [], {}
+    for other in eligible[1:]:
+        a, b = comparison[chosen][comparison[chosen]["selected"]]["cv"], comparison[other][comparison[other]["selected"]]["cv"]
+        auc = corrected_resampled_ttest(b["roc_auc"]["folds"], a["roc_auc"]["folds"], TEST_FRACTION)
+        brier = corrected_resampled_ttest(b["brier"]["folds"], a["brier"]["folds"], TEST_FRACTION)
+        switch = (auc["mean_difference"] > 0 and auc["p_value"] < ALPHA
+                  and brier["mean_difference"] < 0 and brier["p_value"] < ALPHA)
+        tests[f"{other}_vs_{chosen}"] = {"roc_auc": auc, "brier": brier}
+        steps.append(f"{other} vs {chosen}: CV ROC-AUC {auc['mean_difference']:+.4f} (p={auc['p_value']:.2g}), "
+                     f"CV Brier {brier['mean_difference']:+.4f} (p={brier['p_value']:.2g}) -> "
+                     f"{'switch to ' + other if switch else 'keep ' + chosen}.")
         chosen = other if switch else chosen
-    return {"model": chosen, "variant": comparison[chosen]["selected"], "steps": steps}
+    return {"model": chosen, "variant": comparison[chosen]["selected"], "steps": steps, "tests": tests}
 
 
 def dataset_summary(raw, df, removed) -> dict:
@@ -107,62 +127,70 @@ def dataset_summary(raw, df, removed) -> dict:
 def main() -> dict:
     raw = load_raw()
     df, removed = clean(raw)
-    X_train, X_test, y_train, y_test = split(df)
-    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=SEED)
+    X_train, X_test, y_train, y_test = split(df)  # X_test is touched only after selection, at the end
+    cv = RepeatedStratifiedKFold(n_splits=N_FOLDS, n_repeats=N_REPEATS, random_state=SEED)
 
     MODELS_DIR.mkdir(exist_ok=True)
     ARTIFACTS_DIR.mkdir(exist_ok=True)
     models = build_models()
-    results, comparison = {}, {}
+    comparison, oof_store = {}, {}
     for name, pipeline in models.items():
         comparison[name] = {}
         for variant in VARIANTS:
-            model = build_variant(pipeline, variant)
-            folds, oof = oof_cross_validate(model, X_train, y_train, cv)
-            fitted = clone(model).fit(X_train, y_train)
+            folds, oof = oof_cross_validate(build_variant(pipeline, variant), X_train, y_train, cv)
+            per_repeat = [calibration_stats(y_train, o) for o in oof]
             comparison[name][variant] = {
                 "cv": summarize_folds(folds),
-                "test": full_metrics(y_test, fitted.predict_proba(X_test)[:, 1]),
-                "oof_calibration": calibration_data(y_train, oof),
+                "oof_calibration": calibration_data(np.tile(y_train, N_REPEATS), oof.ravel()),
+                "oof_calibration_stats": {k: {"mean": float(np.mean([r[k] for r in per_repeat])),
+                                              "std": float(np.std([r[k] for r in per_repeat]))}
+                                          for k in per_repeat[0]},
             }
-            comparison[name][variant]["_fitted"] = fitted
-        selected, comparison[name]["calibration_reason"] = choose_variant(comparison[name])
-        comparison[name]["selected"] = selected
-        # Each model is kept and reported in its selected variant.
-        models[name] = comparison[name][selected]["_fitted"]
-        cv_sel = comparison[name][selected]["cv"]
-        results[name] = {"cv_train_5fold": {m: {k: cv_sel[m][k] for k in ("mean", "std")} for m in CV_SCORING},
-                         "test": evaluate(models[name], X_test, y_test)}
-        joblib.dump(models[name], MODELS_DIR / f"{name}.joblib")
-        for variant in VARIANTS:
-            del comparison[name][variant]["_fitted"]
+            oof_store[f"{name}__{variant}"] = oof.astype(np.float32)
+            print(f"  {name:<20} {variant:<9} CV ROC-AUC {comparison[name][variant]['cv']['roc_auc']['mean']:.4f} "
+                  f"Brier {comparison[name][variant]['cv']['brier']['mean']:.4f}", flush=True)
+        selected, reason, tests = choose_variant(comparison[name])
+        comparison[name].update(selected=selected, calibration_reason=reason, calibration_tests=tests)
+    np.savez_compressed(OOF_PATH, index=X_train.index.to_numpy(), y=y_train.to_numpy(),
+                        fold=fold_assignment(cv, X_train, y_train), **oof_store)
 
     selection = select_final(comparison)
-    if (selection["model"], selection["variant"]) != (FINAL_MODEL, FINAL_VARIANT):
-        # The explainer (exact LinearExplainer on the logistic regression score) assumes this choice.
-        raise RuntimeError(f"Selection framework chose {selection}; update FINAL_MODEL and the explainer.")
+    final = selection["model"]
+
+    # Selection is complete. Only now: fit each model's selected variant on the whole training split and
+    # score it once on the held-out test set (reported, never used to choose anything).
+    results = {}
+    for name, pipeline in models.items():
+        fitted = build_variant(pipeline, comparison[name]["selected"]).fit(X_train, y_train)
+        models[name] = fitted
+        comparison[name]["test"] = full_metrics(y_test, fitted.predict_proba(X_test)[:, 1])
+        cv_sel = comparison[name][comparison[name]["selected"]]["cv"]
+        results[name] = {"cv": {m: {k: cv_sel[m][k] for k in ("mean", "std", "min", "max")} for m in cv_sel},
+                         "test": evaluate(fitted, X_test, y_test)}
+        joblib.dump(fitted, MODELS_DIR / f"{name}.joblib")
 
     # The final artifact is the full fitted Pipeline (preprocessing + classifier), so inference
     # cannot apply different preprocessing than training. It is the exact model scored on the test set.
     joblib.dump({
-        "pipeline": models[FINAL_MODEL],
-        "model_name": FINAL_MODEL,
+        "pipeline": models[final],
+        "model_name": final,
         "features": FEATURES,
         "model_features": MODEL_FEATURES,
         "categories": CATEGORIES,
         "seed": SEED,
-        "test_metrics": results[FINAL_MODEL]["test"],
-        "calibration": FINAL_VARIANT,
-        "calibration_reason": comparison[FINAL_MODEL]["calibration_reason"],
+        "test_metrics": results[final]["test"],
+        "calibration": selection["variant"],
+        "calibration_reason": comparison[final]["calibration_reason"],
         "versions": {"scikit-learn": sklearn.__version__, "xgboost": xgboost.__version__},
     }, FINAL_MODEL_PATH)
 
     report = {"seed": SEED, "split": {"train": len(X_train), "test": len(X_test)},
-              "dataset": dataset_summary(raw, df, removed), "final_model": FINAL_MODEL,
-              "final_model_reason": " ".join(selection["steps"]) + " " +
-              comparison[FINAL_MODEL]["calibration_reason"],
-              "selection": {**selection, "auc_margin": AUC_MARGIN, "brier_margin": BRIER_MARGIN,
-                            "interpretability_order": INTERPRETABILITY_ORDER},
+              "cv": {"scheme": "RepeatedStratifiedKFold", "n_splits": N_FOLDS, "n_repeats": N_REPEATS,
+                     "random_state": SEED},
+              "dataset": dataset_summary(raw, df, removed), "final_model": final,
+              "final_model_reason": " ".join(selection["steps"]) + " " + comparison[final]["calibration_reason"],
+              "selection": {**selection, "alpha": ALPHA, "test": "corrected resampled t-test (Nadeau & Bengio)",
+                            "interpretability_order": INTERPRETABILITY_ORDER, "explanation_gate": EXPLAINABLE},
               "models": results, "comparison": comparison}
     (ARTIFACTS_DIR / "metrics.json").write_text(json.dumps(report, indent=2))
     return report
@@ -173,7 +201,9 @@ if __name__ == "__main__":
     print(f"Final model: {report['final_model']} -> {FINAL_MODEL_PATH}")
     print(f"Train {report['split']['train']} / Test {report['split']['test']}")
     print(f"{'model':<22}{'split':<7}{'acc':>7}{'prec':>7}{'rec':>7}{'f1':>7}{'auc':>7}")
+    for step in report["selection"]["steps"]:
+        print(step)
     for name, r in report["models"].items():
-        cv = {m: v["mean"] for m, v in r["cv_train_5fold"].items()}
+        cv = {m: v["mean"] for m, v in r["cv"].items()}
         for split, m in (("cv", cv), ("test", r["test"])):
             print(f"{name:<22}{split:<7}" + "".join(f"{m[k]:>7.3f}" for k in CV_SCORING))

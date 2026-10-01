@@ -37,53 +37,69 @@ The model estimates the probability that a record carries the dataset's "cardiov
 All of these steps are fitted on training data only. Input validation uses the same plausibility ranges as the data cleaning, plus two cross-checks: systolic must be above diastolic, and BMI must be within 12–60.
 
 ### Models evaluated
-Logistic Regression, Random Forest and XGBoost. Each was tested in three versions: raw probabilities, sigmoid-calibrated and isotonic-calibrated. All were compared with 5-fold stratified cross-validation (CV) on the training split.
+Logistic Regression, Random Forest and XGBoost. Each was tested in three versions: raw probabilities, sigmoid-calibrated and isotonic-calibrated. All nine were compared with 5-fold stratified cross-validation (CV) repeated 5 times, giving 25 splits of the training split.
 
 ### Final model
-**Logistic Regression with isotonic calibration** (`CalibratedClassifierCV`, 3-fold, `ensemble=False`).
+**XGBoost, raw (uncalibrated) probabilities.**
 
-It was chosen by a documented framework that uses CV results only:
-- **Calibration:** a calibrated version is adopted only if it lowers mean CV Brier score by at least 0.001 and lowers it in every fold.
-- **Model:** a less interpretable model is adopted only if it gains at least 0.02 CV ROC-AUC without worse calibration.
+It was chosen by a selection protocol declared before the repeated-CV comparison was run:
+- **Comparisons:** each is a corrected resampled t-test on the same 25 splits at α = 0.05.
+- **Calibration:** a calibrator is adopted only if it lowers CV Brier significantly.
+- **Model:** starting from the most interpretable model, the next one is adopted only if it is significantly better on both ROC-AUC and Brier.
 
-The tree models were 0.009–0.010 CV ROC-AUC better, which is below that margin. The margins are judgement calls, fixed after the first comparison was known.
+Random Forest beat Logistic Regression, and XGBoost then beat Random Forest, both consistently: about +0.01 and +0.001 CV ROC-AUC respectively, each with lower Brier.
 
-### Evaluation (held-out test set, selected model)
+**Correction.** An earlier version selected Logistic Regression using margins (0.02 ROC-AUC, 0.001 Brier) chosen after the results were known. Those margins are no longer used.
+
+### Evaluation (held-out test set, final model)
 | Metric | Value | 95% bootstrap interval |
 |---|---|---|
-| ROC-AUC | 0.793 | 0.786–0.801 |
-| PR-AUC | 0.770 | 0.759–0.781 |
-| F1 at 0.50 | 0.725 | 0.717–0.733 |
-| Brier score | 0.184 | 0.181–0.188 |
-| Log loss | 0.553 | |
-| Accuracy / precision / recall at 0.50 | 0.732 / 0.735 / 0.715 | |
+| ROC-AUC | 0.804 | 0.797–0.812 |
+| PR-AUC | 0.785 | 0.774–0.796 |
+| F1 at 0.50 | 0.722 | 0.714–0.731 |
+| Brier score | 0.180 | 0.176–0.183 |
+| ECE (10 bins) | 0.008 | 0.007–0.018 |
+| Log loss | 0.538 | |
+| Accuracy / precision / recall at 0.50 | 0.737 / 0.755 / 0.692 | |
 
-CV ROC-AUC was 0.791 ± 0.004. XGBoost's test ROC-AUC is higher by 0.011 (paired 95% interval 0.009–0.014), and its Brier score is lower by 0.005. These are real but small differences.
+CV ROC-AUC was 0.801 ± 0.004 (range 0.795–0.808 over 25 splits). Logistic Regression's test ROC-AUC is lower by 0.011 (paired interval 0.009–0.014). The bootstrap intervals describe uncertainty from the evaluation sample, not clinical uncertainty.
 
 ### Calibration
-Raw logistic regression was systematically miscalibrated. It over-estimated in the 25–35% range and in the top bin, and under-estimated in the 55–75% range. Isotonic calibration lowered CV Brier from 0.1870 to 0.1852 and log loss from 0.561 to 0.555, without changing ROC-AUC. Its step function slightly lowered PR-AUC (0.771 to 0.767), and calibrated probabilities rarely exceed about 0.9. Sigmoid calibration made no difference. Calibration here means agreement with this dataset's labels, not clinical validity.
+- **Final model:** out of fold, XGBoost's raw probabilities agree closely with observed outcome frequencies in this dataset (ECE 0.004, slope 0.99). Neither calibrator lowered CV Brier, so the protocol kept raw probabilities. On the test set, ECE is 0.008.
+- **Logistic Regression candidate:** its raw miscalibration is S-shaped (slope ≈ 1 but ECE 0.034), and isotonic calibration corrects it.
+
+"Calibration" here means agreement with this dataset's labels, not clinical accuracy.
 
 ### Explainability
-- **SHAP:** exact SHAP values (`LinearExplainer`) for the logistic-regression score, grouped into readable features. The displayed probability is that score passed through the monotone calibration, so directions are preserved but sizes are not additive in percentage points.
-- **Other analyses:** permutation importance, partial dependence and individual conditional expectation (ICE) curves, XGBoost interaction values, and a guarded what-if analysis.
+- **SHAP:** exact TreeSHAP values for XGBoost's log-odds score, grouped into readable features. The base value is re-anchored for a constant 6e-4 offset in shap's reported expected value. Base value + contributions reconciles with the model's score within 1e-5 (documented float32 tolerance), and the displayed probability is the sigmoid of that score.
+- **Interactions:** XGBoost has them (about 30% of its attribution), so one input's contribution can depend on the others.
+- **Other analyses:** permutation importance, partial dependence and ICE curves, interaction values, and a guarded what-if analysis.
 - **Top features:** systolic blood pressure, age and cholesterol.
 
-### Subgroup performance (test set)
-| Group | n | ROC-AUC | Observed rate | Mean predicted |
+### Reliability and robustness
+Measured after selection, and reported rather than used to re-select:
+- **Responses are less smooth.** Changing one numeric input by 1% moves XGBoost's estimate by a median of 0.7 percentage points (pp), but by 11 pp at the 95th percentile and up to 37 pp. Logistic Regression's equivalents are 0.0 / 2.8 / 6.0 pp. Recorded blood pressures cluster at round values (40% of systolic readings are exactly 120 mmHg), and the trees split near them.
+- **The response is not monotone.** For all 23 tested profiles, XGBoost's estimate is non-monotone in systolic BP, diastolic BP, age and weight. The largest single-step drop along systolic BP was 14 pp. Logistic Regression was non-decreasing in every case.
+- **Explanations are less stable.** Under ±1% changes, XGBoost's top-5 contributions stayed identical in 74% of cases (Logistic Regression 95%, Random Forest 92%). The top feature was preserved in 96%.
+- **The candidate models disagree.** Across the test set, the spread between the three models' estimates has a median of 5 pp and a 95th percentile of 17 pp. All three give the same class at 0.50 in 92% of records.
+- **Input conformity.** A Mahalanobis-distance check fitted on training data flags the 1% most unusual input profiles as a caution. It never blocks a prediction.
+- **Synthetic distribution shifts.** Ranking quality falls to about 0.75 ROC-AUC in older or higher-blood-pressure populations. A systematic +10 mmHg blood-pressure recording offset raises the mean estimate from 0.50 to 0.64 at an unchanged outcome rate.
+
+### Subgroup performance (test set, final model)
+| Group | N | ROC-AUC [95% CI] | Prevalence | Mean predicted |
 |---|---|---|---|---|
-| Female | 8,972 | 0.791 | 0.491 | 0.495 |
-| Male | 4,743 | 0.797 | 0.501 | 0.498 |
-| Age 29–39 | 367 | 0.803 | 0.210 | 0.245 |
-| Age 40–49 | 3,949 | 0.816 | 0.374 | 0.360 |
-| Age 50–59 | 6,947 | 0.767 | 0.516 | 0.529 |
-| Age 60–65 | 2,452 | 0.692 | 0.670 | 0.659 |
+| Female | 8,972 | 0.803 [0.794, 0.812] | 0.491 | 0.496 |
+| Male | 4,743 | 0.806 [0.793, 0.819] | 0.501 | 0.497 |
+| Age 29–39 | 367 | 0.855 [0.801, 0.905] | 0.210 | 0.227 |
+| Age 40–49 | 3,949 | 0.830 [0.817, 0.843] | 0.374 | 0.382 |
+| Age 50–59 | 6,947 | 0.774 [0.762, 0.785] | 0.516 | 0.515 |
+| Age 60–65 | 2,452 | 0.699 [0.678, 0.722] | 0.670 | 0.668 |
 
 - **Ranking by age:** the model ranks noticeably worse at ages 60–65.
-- **Recall at 0.50 by age:** ranges from 0.44 (ages 29–39) to 0.86 (ages 60–65), following the base rates.
-- **Youngest group:** slightly over-estimated.
+- **Agreement in the large:** mean predicted tracks prevalence in every group.
 - **Gender:** the two gender groups perform similarly.
 
-These results describe differences. They do not establish fairness.
+This is a Subgroup Performance Analysis. It describes differences and is not a fairness certification.
 
 ### Known limitations and potential bias
 - **Provenance:** the population, the collection period and the label definition are not documented in detail.
@@ -92,6 +108,7 @@ These results describe differences. They do not establish fairness.
 - **Gender coding:** female = 1 is inferred from height, because the source does not label the codes.
 - **Narrow coverage:** the data covers ages 29–65 only, and gender groups are imbalanced (65% code 1).
 - **Correlated inputs:** systolic and diastolic blood pressure are correlated (r = 0.73), so explanations can split credit between them unintuitively.
+- **Step-wise model:** the selected tree model reacts in steps and is not monotone in its main inputs (see Reliability and robustness). Small input changes, or rounding, can change the estimate noticeably.
 
 ### Non-clinical status
 No clinical validation, regulatory review or prospective evaluation has been performed. Display bands (<30%, 30–60%, ≥60%) and the 0.50 classification threshold are prototype devices, not clinical thresholds. The guidance shown alongside the estimate comes from fixed informational rules. It is not medical advice.

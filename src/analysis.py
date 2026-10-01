@@ -1,6 +1,7 @@
 """Post-hoc analysis of the trained models, precomputed once into artifacts/analysis.json.
 
 Run: python -m src.analysis   (after python -m src.train_models; takes about a minute)
+Robustness analyses (OOF calibration, novelty, stability, disagreement) live in src/reliability.py.
 
 Everything here uses the held-out TEST split for model behaviour (never used for fitting or selection)
 and the cleaned dataset only for descriptive data-quality statistics. The UI reads the JSON; it never
@@ -16,7 +17,8 @@ from sklearn.inspection import permutation_importance
 from sklearn.metrics import confusion_matrix, precision_recall_curve, roc_curve
 
 from src.data_loader import ROOT, SEED, TARGET, clean_with_exclusions, load_raw, split
-from src.evaluate_models import bootstrap_ci, calibration_data, full_metrics, subgroup_metrics, threshold_metrics
+from src.evaluate_models import (bootstrap_ci, calibration_data, decision_curve, full_metrics, subgroup_metrics,
+                                 threshold_metrics)
 from src.explainability import ModelExplainer, _column_owners
 from src.prediction import load_model
 from src.preprocessing import (CATEGORICAL, CATEGORY_LABELS, FEATURE_LABELS, FEATURES, MODEL_FEATURES, NUMERIC,
@@ -25,7 +27,8 @@ from src.preprocessing import (CATEGORICAL, CATEGORY_LABELS, FEATURE_LABELS, FEA
 ARTIFACT = ROOT / "artifacts" / "analysis.json"
 MODEL_NAMES = ["logistic_regression", "random_forest", "xgboost"]
 TABLE_THRESHOLDS = [round(t, 2) for t in np.arange(0.1, 0.91, 0.1)]
-GRID_THRESHOLDS = [round(t, 2) for t in np.arange(0.01, 1.0, 0.01)]
+GRID_THRESHOLDS = [round(t, 2) for t in np.arange(0.05, 0.951, 0.01)]
+SHAP_ROWS = 5000  # global SHAP on a fixed random sample of cleaned records (TreeSHAP on all 68k is slow)
 AGE_BINS, AGE_LABELS = [29, 40, 50, 60, 66], ["29–39", "40–49", "50–59", "60–65"]
 RESPONSE_FEATURES = ["ap_hi", "age", "ap_lo", "weight"]
 DESCRIBE = ["age", "height", "weight", "ap_hi", "ap_lo"]
@@ -76,7 +79,7 @@ def model_evaluation(models: dict, X_test, y_test) -> dict:
 
 
 def shap_global(explainer: ModelExplainer, df: pd.DataFrame) -> list[dict]:
-    """Mean |SHAP| plus direction: for numeric features the sign of the value-vs-contribution slope,
+    """Mean |SHAP| (score units of the final model) plus direction: for numeric features the sign of the value-vs-contribution slope,
     for categorical features the mean contribution of each level."""
     values = explainer.grouped_shap(df)
     data = add_bmi(df)
@@ -159,18 +162,21 @@ def main() -> dict:
         "test_rows": len(X_test), "seed": SEED,
         "data_quality": data_quality(raw, df, removed, excluded),
         "models": model_evaluation(models, X_test, y_test),
+        # Descriptive only: no threshold is chosen from these test-set rows.
         "thresholds": {"table": threshold_metrics(y_test, p_final, TABLE_THRESHOLDS),
-                       "grid": threshold_metrics(y_test, p_final, GRID_THRESHOLDS)},
+                       "grid": threshold_metrics(y_test, p_final, GRID_THRESHOLDS),
+                       "decision_curve": decision_curve(y_test, p_final, GRID_THRESHOLDS)},
         "subgroups": {"gender": subgroup_metrics(y_test, p_final, gender),
                       "age_group": subgroup_metrics(y_test, p_final, age_group.astype(str))},
         "bootstrap": bootstrap_ci(y_test, {n: m.predict_proba(X_test)[:, 1] for n, m in models.items()},
-                                  n_resamples=1000, seed=SEED, reference="logistic_regression"),
-        "shap_global": shap_global(ModelExplainer(bundle), df),
+                                  n_resamples=1000, seed=SEED, reference=bundle["model_name"]),
+        "shap_rows": SHAP_ROWS,
+        "shap_global": shap_global(ModelExplainer(bundle), df.sample(SHAP_ROWS, random_state=SEED)),
         "permutation_importance": sorted(
             [{"feature": f, "label": FEATURE_LABELS[f], "mean": float(m), "std": float(s)}
              for f, m, s in zip(FEATURES, permutation.importances_mean, permutation.importances_std)],
             key=lambda r: -r["mean"]),
-        "feature_response": feature_response({"logistic_regression": final, "xgboost": models["xgboost"]}, sample),
+        "feature_response": feature_response(models, sample),
         "interactions": tree_interactions(models["xgboost"], sample.iloc[:1000]),
     }
     ARTIFACT.write_text(json.dumps(report, indent=1, allow_nan=False, default=float))
@@ -183,7 +189,7 @@ if __name__ == "__main__":
     for n, m in r["bootstrap"]["models"].items():
         print(n, {k: f"{v['estimate']:.4f} [{v['lower']:.4f}, {v['upper']:.4f}]" for k, v in m.items()})
     for n, d in r["bootstrap"]["differences"].items():
-        print("diff", n, "- LR", {k: f"{v['estimate']:+.4f} [{v['lower']:+.4f}, {v['upper']:+.4f}]" for k, v in d.items()})
+        print("diff", n, "- final", {k: f"{v['estimate']:+.4f} [{v['lower']:+.4f}, {v['upper']:+.4f}]" for k, v in d.items()})
     for kind, rows in r["subgroups"].items():
         for g in rows:
             print(kind, g["group"], g["n"], g.get("roc_auc"), round(g["observed_rate"], 3), round(g["mean_predicted"], 3))

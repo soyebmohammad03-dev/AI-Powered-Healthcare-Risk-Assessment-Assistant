@@ -8,8 +8,8 @@ from src.explainability import NEGATIVE, POSITIVE
 from src.prediction import DEMO_INPUTS, InvalidInputError, PatientInput, predict
 from src.preprocessing import CATEGORY_LABELS, FEATURE_LABELS, FEATURES, PLAUSIBLE
 from src.recommendations import Category, Priority, generate
-from ui.core import (MODEL_NAMES, PAGES, band_bar, band_color, band_name, engine, factor_rows, footer, page_header,
-                     readable, section, tokens)
+from ui.core import (MODEL_NAMES, PAGES, band_bar, band_color, band_name, conformity, engine, factor_rows, footer,
+                     page_header, readable, section, tokens)
 
 PRIORITY_COLORS = {Priority.HIGH: "red", Priority.MODERATE: "orange", Priority.LOW: "green", Priority.INFO: "gray"}
 
@@ -106,11 +106,29 @@ def run_assessment(bundle, explainer):
     st.session_state["assessment"] = (patient, result, explanation, generate(patient, result, explanation))
 
 
-def result_panel(bundle, result, explanation):
+def conformity_html(patient) -> tuple[str, str]:
+    """(meta-grid value, caution block). An unusual input is a caution signal, never a validation error."""
+    c = conformity(patient)
+    if c is None:
+        return "Not available", ""
+    if not c["unusual"]:
+        return "Within training distribution", ""
+    names = ", ".join(FEATURE_LABELS[f].replace(" (from height and weight)", "") for f in c["unusual_features"])
+    detail = (f" Values outside the central 99% of the reference data: {escape(names)}." if names else
+              " No single value is extreme; the combination of values is uncommon.")
+    t = tokens()
+    return "Unusual profile", (
+        f"<div class='note' style='border-left-color:{t['mid_band']}'><b>CAUTION.</b> This input profile is unusual "
+        f"relative to the model's reference population (the training data).{detail} Interpret the model estimate "
+        "cautiously. This is a statistical check, not a medical judgement.</div>")
+
+
+def result_panel(bundle, patient, result, explanation):
     t = tokens()
     band = band_name(result.probability_positive)
     color = band_color(band)
     calibration = bundle.get("calibration", "none").capitalize()
+    conformity_value, caution = conformity_html(patient)
     st.html(f"""
 <div class='hero-label'>Model estimate</div>
 <div style='display:flex;align-items:flex-end;gap:1rem;flex-wrap:wrap'>
@@ -123,9 +141,11 @@ def result_panel(bundle, result, explanation):
 <div class='subtle' style='font-size:.9rem'>Model-estimated probability of the dataset's cardiovascular-disease
 label for these inputs. Not a diagnosis, and not a clinically validated individual risk.</div>
 {band_bar(result.probability_positive)}
+{caution}
 <div class='meta-grid'>
   <div><div class='meta-k'>Model</div><div class='meta-v'>{MODEL_NAMES[result.model_name]}</div></div>
-  <div><div class='meta-k'>Calibration</div><div class='meta-v'>{escape(calibration)} (CV-selected)</div></div>
+  <div><div class='meta-k'>Calibration</div><div class='meta-v'>{escape(calibration)} (protocol-selected)</div></div>
+  <div><div class='meta-k'>Input conformity</div><div class='meta-v'>{conformity_value}</div></div>
   <div><div class='meta-k'>Reference baseline</div><div class='meta-v'>{explanation.base_probability:.1%}</div></div>
   <div><div class='meta-k'>Class at 0.50</div><div class='meta-v'>{result.predicted_class}
        <span class='subtle' style='font-weight:400'>({'present' if result.predicted_class else 'absent'} label)</span></div></div>
@@ -137,7 +157,9 @@ label for these inputs. Not a diagnosis, and not a clinically validated individu
             "for this prototype. It is not a clinical threshold.\n"
             "- **Classification threshold**: the 0.50 cut-off that turns the probability into the class output. "
             "Other cut-offs trade false positives against false negatives; see **Model → Thresholds**.\n"
-            f"- **Reference baseline**: the model's estimate for an average record in the training data.")
+            f"- **Reference baseline**: the model's estimate for an average record in the training data.\n"
+            "- **Input conformity**: whether these inputs resemble the training data statistically. An unusual "
+            "profile still gets an estimate, with a caution; see **Explain → Assessment reliability**.")
 
     section("How the model arrived here")
     up = [c for c in explanation.contributions if c.direction == POSITIVE][:3]
@@ -201,8 +223,8 @@ with left:
 with right:
     with st.container(border=True):
         if "assessment" in st.session_state:
-            _, result, explanation, _ = st.session_state["assessment"]
-            result_panel(bundle, result, explanation)
+            patient, result, explanation, _ = st.session_state["assessment"]
+            result_panel(bundle, patient, result, explanation)
         else:
             st.html("<div class='hero-label'>Model estimate</div>"
                     "<div class='hero-number subtle' style='opacity:.35'>—</div>")

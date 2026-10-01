@@ -133,5 +133,5 @@ def test_metrics_report():
     assert report["final_model"] in report["models"] and report["final_model_reason"]
     assert report["dataset"]["raw_records"] == 70000 and report["dataset"]["clean_records"] == 68573
     for r in report["models"].values():
-        assert set(r) == {"cv_train_5fold", "test"}
-        assert all(0 <= r["cv_train_5fold"][m]["mean"] <= 1 for m in r["cv_train_5fold"])
+        assert set(r) == {"cv", "test"}
+        assert all(0 <= r["cv"][m]["min"] <= r["cv"][m]["mean"] <= r["cv"][m]["max"] for m in r["cv"] if m != "log_loss")

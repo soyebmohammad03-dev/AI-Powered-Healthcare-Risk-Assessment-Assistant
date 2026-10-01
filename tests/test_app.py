@@ -8,7 +8,7 @@ from streamlit.testing.v1 import AppTest
 from src import prediction
 from src.data_loader import ROOT
 from src.explainability import explain
-from src.prediction import DEMO_INPUTS, FINAL_MODEL_PATH, predict
+from src.prediction import DEMO_INPUTS, FINAL_MODEL_PATH, load_model, predict
 from src.recommendations import DISCLAIMER, Category, generate
 
 APP = str(ROOT / "app.py")
@@ -84,7 +84,8 @@ def test_demo_assessment_end_to_end(label):
     assert guidance.risk_category.name.upper() in text and "Prototype estimate band" in text
     assert "not a clinically validated" in text
     assert "How the model arrived here" in text and "Model contribution ≠ medical causation" in text
-    assert "Isotonic" in text and "Reference baseline" in text                  # secondary information
+    assert load_model()["calibration"].capitalize() in text and "Reference baseline" in text  # secondary info
+    assert "Input conformity" in text and "Within training distribution" in text
     for rec in guidance.recommendations:                                        # guidance
         if rec.category is not Category.MODEL_CONTEXT:
             assert rec.title in text
@@ -164,14 +165,16 @@ def test_explore_page_what_if_flow():
 def test_model_page_sections():
     at = visit(start(), "model")
     text = page_text(at)
-    for heading in ("Selection framework", "Probability ≠ display band ≠ classification threshold",
-                    "Subgroup Performance Analysis", "evaluation uncertainty, not clinical uncertainty",
-                    "Two different questions"):
+    for heading in ("Selection protocol", "Methodological correction", "Model probability ≠ display band ≠ classification threshold",
+                    "Subgroup Performance Analysis", "not clinical uncertainty", "Two different questions",
+                    "Controlled distribution-shift experiment", "Model disagreement", "Explanation stability",
+                    "Input conformity"):
         assert heading in text, heading
     assert len(at.get("plotly_chart")) >= 15
     at.slider(key="threshold").set_value(0.3).run()
     assert not at.exception
-    assert "At threshold 0.30" in " ".join(c.proto.spec for c in at.get("plotly_chart"))
+    specs = " ".join(c.proto.spec for c in at.get("plotly_chart"))
+    assert "At threshold 0.30" in specs and "Net benefit (exploratory" in specs
 
 
 def test_methodology_page_with_model_card():
