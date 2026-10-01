@@ -10,7 +10,7 @@ Theme: Healthcare + Human-Centered AI + Explainable AI.
 | Phase | Scope | Status |
 |---|---|---|
 | 1 | Dataset acquisition, inspection, preprocessing, baseline training & evaluation | Done |
-| 2 | Model selection, persistence, prediction pipeline | Planned |
+| 2 | Model selection, persistence, prediction pipeline | Done |
 | 3 | SHAP explainability | Planned |
 | 4 | Rule-based informational guidance | Planned |
 | 5 | Streamlit application | Planned |
@@ -63,7 +63,78 @@ Produced by `python -m src.train_models`. The full output, including CV standard
 | XGBoost | 5-fold CV | 0.806 | 0.805 | 0.765 | 0.782 | 0.867 |
 | | Test | 0.918 | 0.871 | 0.964 | 0.915 | 0.947 |
 
-The test set has only 61 records, so one prediction changes accuracy by about 1.6 points. Model selection (Phase 2) therefore relies on the cross-validation scores, not on the test scores.
+The test set has only 61 records, so one prediction changes accuracy by about 1.6 points. Model selection therefore relies on the cross-validation scores, not on the test scores.
+
+## Final model: Logistic Regression
+
+Logistic Regression is the prototype model because:
+
+- It has the best 5-fold cross-validation ROC-AUC (0.907), accuracy, precision and F1 of the three models.
+- Its predictions are a weighted sum of the inputs, so it is the easiest to explain, which matters most for this explainable-AI product.
+
+XGBoost has the highest test accuracy. That score comes from a single 61-record split, and XGBoost has the lowest cross-validation scores, so it was not chosen on that basis.
+
+The other two models are still saved to `models/` and reported in `artifacts/metrics.json` as evaluation artifacts.
+
+## Prediction pipeline
+
+```
+PatientInput (validated dataclass)
+      │  to_frame(): one row, columns named explicitly
+      ▼
+models/final_model.joblib ── Pipeline[ preprocessor → LogisticRegression ]
+      │  predict_proba
+      ▼
+PredictionResult(predicted_class, probability_positive, probability_negative, model_name, inputs)
+```
+
+- **Persistence:** `models/final_model.joblib` is a dictionary holding:
+  - the whole fitted scikit-learn `Pipeline` (imputers, scaler, one-hot encoder and classifier);
+  - the feature list and category codes it was trained with;
+  - its test metrics and the library versions.
+
+  The preprocessing and the model are saved as one object, so a different preprocessor cannot be paired with the model by mistake. This is the same pipeline object that was scored on the test set, and a test checks that.
+- **Training and inference:** `src/train_models.py` fits the pipeline on the training split and saves it. `src/prediction.py` only loads and applies it, and never retrains.
+- **Artifact checks:** `load_model()` raises `ModelArtifactError` and tells you how to fix it if the file is missing or corrupted, has no preprocessing step, or was built for a different feature list.
+- **Output:** `predicted_class` uses the default 0.5 threshold and refers to the dataset target: 1 = disease present, according to the 1988 angiography label. This is raw model output. Any user-facing risk wording added later will be prototype bands, not clinical thresholds.
+
+### Input contract (`PatientInput`)
+
+- All 13 features are required. The model never receives a missing value; if a test result is unknown, the input is rejected.
+- Values must be numbers. Strings, booleans and NaN are rejected.
+- Categorical fields and `ca` must be whole numbers, and categorical fields must be one of the documented codes listed in the dataset table above.
+- Numeric fields must fall within sanity bounds:
+
+  | Field | Bounds |
+  |---|---|
+  | age | 18–100 |
+  | trestbps | 80–220 |
+  | chol | 100–600 |
+  | thalach | 60–220 |
+  | oldpeak | 0–7 |
+  | ca | 0–3 |
+
+  These bounds catch typos and impossible values. They are **not** clinical limits.
+- Every problem found is reported together in an `InvalidInputError`, which has one readable message per field in `.errors`.
+
+### Predict from Python
+
+```python
+from src.prediction import PatientInput, predict, DEMO_INPUTS
+
+patient = PatientInput(age=56, sex=1, cp=2, trestbps=134, chol=245, fbs=0, restecg=2,
+                       thalach=148, exang=0, oldpeak=1.2, slope=2, ca=1, thal=3)
+result = predict(patient)            # or PatientInput.from_dict({...})
+print(result.probability_positive)
+```
+
+`DEMO_INPUTS` contains three **synthetic** example inputs (A, B, C). They are written by hand and are not real patients or rows from the dataset; their predictions are always computed by the model.
+
+To check the saved artifact and score the demo inputs:
+
+```bash
+python -m src.prediction
+```
 
 ## Setup
 
@@ -87,7 +158,7 @@ brew install libomp
 python -m src.train_models
 ```
 
-This writes the fitted pipelines to `models/*.joblib` (not committed) and the metrics to `artifacts/metrics.json`.
+This regenerates every model artifact. It writes `models/final_model.joblib`, the per-model pipelines `models/{logistic_regression,random_forest,xgboost}.joblib`, and the metrics in `artifacts/metrics.json`. Model files are not committed; run this once after cloning. The seed is fixed, so the results are identical each time.
 
 ## Test
 
@@ -100,12 +171,13 @@ python -m pytest -q
 ```
 app.py                  Streamlit app (Phase 5)
 data/                   UCI Cleveland data file
-models/                 Trained pipelines (generated)
+models/                 Trained pipelines, incl. final_model.joblib (generated)
 artifacts/metrics.json  Measured evaluation results
 src/data_loader.py      Download, checksum and load the data; binarize the target
 src/preprocessing.py    Feature lists, category codes, preprocessing pipeline
 src/evaluate_models.py  Metrics
 src/train_models.py     Training, cross-validation, test evaluation, saving
+src/prediction.py       Input contract, artifact loading/checks, inference, demo inputs
 tests/                  Automated tests
 docs/methodology.md     Methodology notes
 ```
@@ -113,5 +185,7 @@ docs/methodology.md     Methodology notes
 ## Limitations
 
 - The dataset is small (303 records), comes from a single centre, dates from 1988, and is 68% male. Results may not generalize to other populations.
+- The input bounds only check that values are plausible. Values outside the training data's observed range (see `src/prediction.py`) are accepted but are extrapolation.
+- The model files are pickles tied to the pinned scikit-learn version; retrain after upgrading it.
 - The target is a historical angiographic label. It is not a forecast of future cardiac events.
-- Any risk categories added later will be prototype bands derived from model probability. They are not clinically validated thresholds.
+- Predictions use a 0.5 threshold on the dataset target. Any risk categories added later will be prototype bands derived from model probability. They are not clinically validated thresholds.

@@ -49,6 +49,7 @@
       "thal": 2
     }
   },
+  "final_model": "logistic_regression",
   "models": {
     "logistic_regression": {
       "cv_train_5fold": {

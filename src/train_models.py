@@ -5,6 +5,8 @@ Run: python -m src.train_models
 import json
 
 import joblib
+import sklearn
+import xgboost
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import StratifiedKFold, cross_validate, train_test_split
@@ -13,11 +15,15 @@ from xgboost import XGBClassifier
 
 from src.data_loader import ROOT, TARGET, URL, load_dataset
 from src.evaluate_models import CV_SCORING, evaluate
-from src.preprocessing import CATEGORICAL, FEATURES, NUMERIC, build_preprocessor
+from src.prediction import FINAL_MODEL_PATH
+from src.preprocessing import CATEGORICAL, CATEGORIES, FEATURES, NUMERIC, build_preprocessor
 
 SEED = 42
 MODELS_DIR = ROOT / "models"
 ARTIFACTS_DIR = ROOT / "artifacts"
+# Fixed decision (see docs/methodology.md): best 5-fold CV ROC-AUC, accuracy, precision and F1,
+# and directly interpretable. Not chosen from the 61-record test set.
+FINAL_MODEL = "logistic_regression"
 
 
 def build_models() -> dict:
@@ -52,22 +58,36 @@ def main() -> dict:
 
     MODELS_DIR.mkdir(exist_ok=True)
     ARTIFACTS_DIR.mkdir(exist_ok=True)
+    models = build_models()
     results = {}
-    for name, model in build_models().items():
+    for name, model in models.items():
         scores = cross_validate(model, X_train, y_train, cv=cv, scoring=CV_SCORING)
         cv_metrics = {m: {"mean": scores[f"test_{m}"].mean(), "std": scores[f"test_{m}"].std()} for m in CV_SCORING}
         model.fit(X_train, y_train)
         results[name] = {"cv_train_5fold": cv_metrics, "test": evaluate(model, X_test, y_test)}
         joblib.dump(model, MODELS_DIR / f"{name}.joblib")
 
+    # The final artifact is the full fitted Pipeline (preprocessing + classifier), so inference
+    # cannot apply different preprocessing than training. It is the exact model scored on the test set.
+    joblib.dump({
+        "pipeline": models[FINAL_MODEL],
+        "model_name": FINAL_MODEL,
+        "features": FEATURES,
+        "categories": CATEGORIES,
+        "seed": SEED,
+        "test_metrics": results[FINAL_MODEL]["test"],
+        "versions": {"scikit-learn": sklearn.__version__, "xgboost": xgboost.__version__},
+    }, FINAL_MODEL_PATH)
+
     report = {"seed": SEED, "split": {"train": len(X_train), "test": len(X_test)},
-              "dataset": dataset_summary(df), "models": results}
+              "dataset": dataset_summary(df), "final_model": FINAL_MODEL, "models": results}
     (ARTIFACTS_DIR / "metrics.json").write_text(json.dumps(report, indent=2))
     return report
 
 
 if __name__ == "__main__":
     report = main()
+    print(f"Final model: {report['final_model']} -> {FINAL_MODEL_PATH}")
     print(f"Train {report['split']['train']} / Test {report['split']['test']}")
     print(f"{'model':<22}{'split':<7}{'acc':>7}{'prec':>7}{'rec':>7}{'f1':>7}{'auc':>7}")
     for name, r in report["models"].items():
