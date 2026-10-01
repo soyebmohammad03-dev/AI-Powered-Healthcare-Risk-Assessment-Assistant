@@ -1,10 +1,41 @@
 [theme]
-base = "light"
-primaryColor = "#0F766E"
-backgroundColor = "#FFFFFF"
-secondaryBackgroundColor = "#F3F6F8"
-textColor = "#1F2933"
-font = "sans serif"
+font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap, sans-serif"
+headingFont = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap, sans-serif"
+codeFont = "JetBrains Mono:https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap, monospace"
+baseFontSize = 15
+baseRadius = "0.45rem"
+buttonRadius = "0.45rem"
+headingFontWeights = [650, 600, 600, 600, 600, 600]
+showWidgetBorder = true
+showSidebarBorder = true
+
+[theme.light]
+primaryColor = "#0F6E6E"
+backgroundColor = "#FAFBFC"
+secondaryBackgroundColor = "#F1F3F6"
+textColor = "#111827"
+borderColor = "#E2E6EB"
+linkColor = "#0F6E6E"
+greenColor = "#0F766E"
+orangeColor = "#B45309"
+redColor = "#B91C1C"
+blueColor = "#1D4ED8"
+grayColor = "#6B7280"
+chartCategoricalColors = ["#0F6E6E", "#6366F1", "#C2410C", "#64748B", "#0EA5E9"]
+
+[theme.dark]
+primaryColor = "#2DB4A6"
+backgroundColor = "#0C1117"
+secondaryBackgroundColor = "#151B23"
+textColor = "#E5E7EB"
+borderColor = "#262E3A"
+linkColor = "#5ECFC2"
+greenColor = "#2DD4BF"
+orangeColor = "#F59E0B"
+redColor = "#F87171"
+blueColor = "#60A5FA"
+grayColor = "#9CA3AF"
+chartCategoricalColors = ["#2DB4A6", "#818CF8", "#FB923C", "#94A3B8", "#38BDF8"]
 
 [client]
 toolbarMode = "minimal"

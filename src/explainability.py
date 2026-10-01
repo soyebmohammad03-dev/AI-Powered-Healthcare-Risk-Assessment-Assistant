@@ -1,12 +1,15 @@
-"""SHAP explanations for the persisted Logistic Regression pipeline.
+"""SHAP explanations for the persisted (isotonic-calibrated) Logistic Regression pipeline.
 
 Run `python -m src.explainability` to explain the demo inputs and print global importance.
 
-Explanation space: SHAP values are in LOG-ODDS (the classifier's decision_function), not probability.
-    base_value + sum(contribution.shap_value) == model_output (log-odds)
-    sigmoid(model_output) == PredictionResult.probability_positive
-base_value is the model's log-odds at the average (preprocessed) training record, the reference
-point every contribution is measured from. It is not the average predicted probability.
+Two spaces, kept separate on purpose:
+  * SCORE (log-odds of the underlying logistic regression). SHAP is exact and additive here:
+        base_value + sum(contribution.shap_value) == model_output
+  * PROBABILITY shown to users = isotonic calibration of that score (a monotone, non-decreasing map).
+    It equals PredictionResult.probability_positive. Because the map is non-linear (piecewise constant),
+    contributions are NOT additive in probability space; they keep their direction, not their size.
+base_value is the score at the average (preprocessed) training record; base_probability is its
+calibrated probability.
 """
 import math
 from dataclasses import dataclass
@@ -15,6 +18,7 @@ from functools import lru_cache
 import numpy as np
 import pandas as pd
 import shap
+from sklearn.calibration import CalibratedClassifierCV
 from sklearn.linear_model import LogisticRegression
 
 from src.data_loader import load_dataset, split
@@ -32,7 +36,7 @@ class FeatureContribution:
     label: str                  # readable name, e.g. "Systolic blood pressure"
     value: float                # the patient's untransformed value (BMI: derived from height/weight)
     display_value: str          # e.g. "140", "27.8" or "Above normal"
-    shap_value: float           # log-odds contribution; sum of the feature's encoded columns
+    shap_value: float           # contribution to the score (log-odds); sum of the feature's encoded columns
     direction: str              # POSITIVE, NEGATIVE or NEUTRAL
     relative_importance: float  # |shap_value| / sum of all |shap_value|; sums to 1 across features
     text: str                   # careful, non-causal wording
@@ -40,9 +44,11 @@ class FeatureContribution:
 
 @dataclass(frozen=True)
 class LocalExplanation:
-    base_value: float           # log-odds reference point (see module docstring)
-    model_output: float         # log-odds for this patient
-    probability_positive: float
+    base_value: float           # score (log-odds) at the average training record
+    model_output: float         # score (log-odds) for this input = base_value + sum of contributions
+    base_probability: float     # calibrated probability at base_value (the reference shown to users)
+    probability_positive: float # calibrated probability for this input (== prediction service)
+    uncalibrated_probability: float  # sigmoid(model_output), before calibration; for transparency
     contributions: list[FeatureContribution]  # sorted by |shap_value|, largest first
 
 
@@ -50,8 +56,22 @@ class LocalExplanation:
 class GlobalImportance:
     feature: str
     label: str
-    mean_abs_shap: float        # mean |log-odds contribution| over the dataset
+    mean_abs_shap: float        # mean |score contribution| over the dataset
     relative_importance: float  # share of the total; sums to 1 across features
+
+
+def linear_parts(pipeline) -> tuple[LogisticRegression, object | None]:
+    """(logistic regression, isotonic calibrator or None) inside the persisted pipeline."""
+    clf = pipeline.named_steps["clf"]
+    calibrator = None
+    if isinstance(clf, CalibratedClassifierCV):
+        if len(clf.calibrated_classifiers_) != 1:
+            raise ModelArtifactError("Expected a single calibrated classifier (ensemble=False).")
+        inner = clf.calibrated_classifiers_[0]
+        clf, calibrator = inner.estimator, inner.calibrators[0]
+    if not isinstance(clf, LogisticRegression):
+        raise ModelArtifactError(f"LinearExplainer needs LogisticRegression, got {type(clf).__name__}.")
+    return clf, calibrator
 
 
 def _column_owners(pipeline) -> list[str]:
@@ -79,7 +99,7 @@ def _display(feature: str, value: float) -> str:
 
 
 class ModelExplainer:
-    """Wraps shap.LinearExplainer for the final pipeline's classifier.
+    """Wraps shap.LinearExplainer for the logistic regression inside the final pipeline.
 
     The explainer works on the preprocessed columns (the classifier's real inputs: BMI derived,
     numerics scaled, categoricals one-hot encoded; height and weight enter only through BMI), using the
@@ -91,17 +111,21 @@ class ModelExplainer:
     def __init__(self, bundle: dict | None = None):
         self.pipeline = (bundle or default_model())["pipeline"]
         self.pre = self.pipeline.named_steps["pre"]
-        clf = self.pipeline.named_steps["clf"]
-        if not isinstance(clf, LogisticRegression):
-            raise ModelArtifactError(f"LinearExplainer needs LogisticRegression, got {type(clf).__name__}.")
+        self.lr, self.calibrator = linear_parts(self.pipeline)
         self.owners = _column_owners(self.pipeline)
         X_train = split(load_dataset())[0]
         background = self.pre.transform(X_train)
         # max_samples=all rows: the default (100) would subsample the background.
-        self._shap = shap.LinearExplainer(clf, shap.maskers.Independent(background, max_samples=len(background)))
+        self._shap = shap.LinearExplainer(self.lr, shap.maskers.Independent(background, max_samples=len(background)))
         self.base_value = float(np.ravel(self._shap.expected_value)[0])
+        self.base_probability = self.score_to_probability(self.base_value)
 
-    def _grouped_shap(self, X: pd.DataFrame) -> np.ndarray:
+    def score_to_probability(self, score: float) -> float:
+        if self.calibrator is None:
+            return 1 / (1 + math.exp(-score))
+        return float(np.clip(self.calibrator.predict(np.array([score]))[0], 0.0, 1.0))
+
+    def grouped_shap(self, X: pd.DataFrame) -> np.ndarray:
         """SHAP values per model feature: shape (rows, len(MODEL_FEATURES)), in MODEL_FEATURES order.
         X holds raw FEATURES; the persisted preprocessing derives BMI and encodes."""
         values = np.asarray(self._shap.shap_values(self.pre.transform(X[FEATURES])))
@@ -114,7 +138,7 @@ class ModelExplainer:
         if not isinstance(patient, PatientInput):
             raise TypeError("explain() expects a validated PatientInput.")
         X = patient.to_frame()
-        shap_row = self._grouped_shap(X)[0]
+        shap_row = self.grouped_shap(X)[0]
         total = float(np.abs(shap_row).sum()) or 1.0
         contributions = []
         for feature, s in zip(MODEL_FEATURES, shap_row):
@@ -122,9 +146,8 @@ class ModelExplainer:
             direction = POSITIVE if s > 0 else NEGATIVE if s < 0 else NEUTRAL
             display = _display(feature, value)
             shown = f"{label} ({display})"
-            text = (f"{shown} did not shift the model's output for this input." if s == 0 else
-                    f"{shown} contributed toward a {'higher' if s > 0 else 'lower'} model-estimated "
-                    f"probability for this input.")
+            text = (f"{shown} did not shift the model's score for this input." if s == 0 else
+                    f"{shown} moved the model estimate {'higher' if s > 0 else 'lower'} for this input.")
             contributions.append(FeatureContribution(
                 feature=feature, label=label, value=value, display_value=display,
                 shap_value=float(s), direction=direction, relative_importance=abs(float(s)) / total,
@@ -132,14 +155,17 @@ class ModelExplainer:
             ))
         contributions.sort(key=lambda c: abs(c.shap_value), reverse=True)
         output = self.base_value + float(shap_row.sum())
-        return LocalExplanation(base_value=self.base_value, model_output=output,
-                                probability_positive=1 / (1 + math.exp(-output)),
-                                contributions=contributions)
+        return LocalExplanation(
+            base_value=self.base_value, model_output=output, base_probability=self.base_probability,
+            # taken from the pipeline itself, so it is identical to the prediction service by construction
+            probability_positive=float(self.pipeline.predict_proba(X)[0, 1]),
+            uncalibrated_probability=1 / (1 + math.exp(-output)),
+            contributions=contributions)
 
     def global_importance(self, X: pd.DataFrame | None = None) -> list[GlobalImportance]:
         """Mean |SHAP| per model feature, ranked. Defaults to every record of the cleaned dataset."""
         X = load_dataset() if X is None else X
-        mean_abs = np.abs(self._grouped_shap(X)).mean(axis=0)
+        mean_abs = np.abs(self.grouped_shap(X)).mean(axis=0)
         ranked = sorted(zip(MODEL_FEATURES, mean_abs), key=lambda t: t[1], reverse=True)
         return [GlobalImportance(f, FEATURE_LABELS[f], float(v), float(v / mean_abs.sum())) for f, v in ranked]
 
@@ -157,12 +183,11 @@ if __name__ == "__main__":
     from src.prediction import DEMO_INPUTS, predict
 
     explainer = default_explainer()
-    print(f"Base value (log-odds): {explainer.base_value:+.4f}  "
-          f"(probability {1 / (1 + math.exp(-explainer.base_value)):.4f})")
+    print(f"Base score (log-odds): {explainer.base_value:+.4f}  (calibrated probability {explainer.base_probability:.4f})")
     for name, patient in DEMO_INPUTS.items():
         e, p = explainer.explain(patient), predict(patient)
-        print(f"\n{name}: P(pos) predict={p.probability_positive:.4f} shap={e.probability_positive:.4f} "
-              f"log-odds={e.model_output:+.3f}")
+        print(f"\n{name}: P(pos) predict={p.probability_positive:.4f} explain={e.probability_positive:.4f} "
+              f"uncalibrated={e.uncalibrated_probability:.4f} score={e.model_output:+.3f}")
         for c in e.contributions[:5]:
             print(f"  {c.label:<32}{c.display_value:>18}  {c.shap_value:+.3f}  {c.relative_importance:5.1%}")
     print("\nGlobal importance (mean |SHAP|, log-odds, all cleaned records):")

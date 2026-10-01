@@ -1,0 +1,122 @@
+"""METHODOLOGY: pipeline, data-quality lab, model card, limitations."""
+import pandas as pd
+import plotly.graph_objects as go
+import streamlit as st
+
+from src.data_loader import ROOT
+from src.preprocessing import FEATURE_LABELS
+from ui.core import analysis, chart, footer, kpis, metrics_report, note, page_header, section, tokens
+
+A, R = analysis(), metrics_report()
+DQ = A["data_quality"]
+t = tokens()
+page_header("Methodology", "How the system was built and evaluated",
+            "From raw data to a human-centred interface, with every stage inspectable.")
+
+STAGES = [
+    ("Dataset", f"{DQ['raw_rows']:,} records, 11 inputs, binary cardiovascular-disease label (Kaggle)."),
+    ("Cleaning", f"Documented data-quality rules remove {DQ['removed_rows']:,} implausible or duplicate rows."),
+    ("Feature engineering", "Age in years; BMI from height and weight. Nothing else derived."),
+    ("Preprocessing", "Scaling and one-hot encoding inside the model pipeline, fit on training data only."),
+    ("Cross-validation", "Stratified 80/20 split; 5-fold CV on the training split for every comparison."),
+    ("Model training", "Logistic Regression, Random Forest and XGBoost."),
+    ("Calibration", "Raw, sigmoid and isotonic variants; calibrators fit inside each training fold."),
+    ("Evaluation", "8 metrics, thresholds, subgroups and bootstrap intervals on the untouched test set."),
+    ("Explainability", "Exact SHAP, permutation importance, partial dependence, interactions, what-if."),
+    ("Human-centred interface", "Plain-language results, prototype bands, guidance and limitations."),
+]
+st.html("<div class='pipeline'>" + "".join(
+    f"<div class='step'><div class='step-n'>{i:02d}</div><div class='step-t'>{name}</div>"
+    f"<div class='step-d'>{desc}</div></div>" for i, (name, desc) in enumerate(STAGES, 1)) + "</div>")
+
+tabs = st.tabs(["Data quality lab", "Model card", "Validation strategy", "Limitations"])
+
+with tabs[0]:
+    kpis([("Raw rows", f"{DQ['raw_rows']:,}", "as downloaded"),
+          ("Clean rows", f"{DQ['clean_rows']:,}", "used for modelling"),
+          ("Removed", f"{DQ['removed_rows']:,}", f"{DQ['removed_rows'] / DQ['raw_rows']:.1%} of raw"),
+          ("Missing values", f"{sum(DQ['missing_values_raw'].values())}", f"duplicate ids: {DQ['duplicate_ids_raw']}")])
+    section("Exclusions by rule (applied in this order)")
+    rules = pd.DataFrame([{"Rule": k.replace("_", " "), "Rows removed": v} for k, v in DQ["removed_by_rule"].items()])
+    a, b = st.columns([1, 1.2], gap="large")
+    with a:
+        st.dataframe(rules, hide_index=True, width="stretch")
+    with b:
+        rule = st.selectbox("Example excluded rows", list(DQ["examples"]), format_func=lambda r: r.replace("_", " "))
+        st.dataframe(pd.DataFrame(DQ["examples"][rule]), hide_index=True, width="stretch")
+        st.caption("Up to five rows per rule (age already converted to years). These are recording errors such "
+                   "as negative or four-digit blood pressures, not medical judgements.")
+
+    section("Raw vs clean ranges (min, 1st pct, median, 99th pct, max)")
+    st.dataframe(pd.DataFrame([{"Input": FEATURE_LABELS[c], "Raw": " · ".join(f"{v:g}" for v in r["raw"]),
+                                "Clean": " · ".join(f"{v:g}" for v in r["clean"])} for c, r in DQ["ranges"].items()]),
+                 hide_index=True, width="stretch")
+
+    section("Distributions by outcome (clean data)")
+    feature = st.segmented_control("Feature", list(DQ["histograms"]), default="ap_hi", format_func=FEATURE_LABELS.get,
+                                   key="dq_feature", label_visibility="collapsed") or "ap_hi"
+    h = DQ["histograms"][feature]
+    centers = [(a + b) / 2 for a, b in zip(h["edges"], h["edges"][1:])]
+    fig = go.Figure()
+    fig.add_trace(go.Bar(x=centers, y=h["target_0"], name="Label: absent", marker_color=t["lower"], opacity=0.75))
+    fig.add_trace(go.Bar(x=centers, y=h["target_1"], name="Label: present", marker_color=t["higher"], opacity=0.75))
+    chart(fig, height=300, barmode="overlay", xaxis_title=FEATURE_LABELS[feature], yaxis_title="Records")
+
+    a, b = st.columns(2, gap="large")
+    with a:
+        section("Disease-label rate by category")
+        rows = [{"Input": FEATURE_LABELS[col], "Value": v["label"], "Records": v["n"], "Label rate": v["disease_rate"]}
+                for col, vals in DQ["categorical"].items() for v in vals]
+        st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch", height=380,
+                     column_config={"Label rate": st.column_config.ProgressColumn(format="percent", min_value=0, max_value=1)})
+    with b:
+        section("Correlation between numeric inputs")
+        corr = A["data_quality"]["correlation"]
+        names = [FEATURE_LABELS[f].replace(" (from height and weight)", "") for f in corr["features"]]
+        fig = go.Figure(go.Heatmap(z=corr["matrix"], x=names, y=names, zmin=-1, zmax=1,
+                                   colorscale=[[0, t["lower"]], [0.5, t["sunken"]], [1, t["higher"]]],
+                                   text=[[f"{v:.2f}" for v in r] for r in corr["matrix"]], texttemplate="%{text}"))
+        chart(fig, height=380, yaxis_autorange="reversed")
+    note(f"<b>Target balance:</b> raw {DQ['target_raw']['0']:,} absent / {DQ['target_raw']['1']:,} present; "
+         f"clean {DQ['target_clean']['0']:,} / {DQ['target_clean']['1']:,}. Smokers and drinkers have slightly "
+         "lower label rates than non-smokers and non-drinkers in this data, a confounded pattern the model inherits.")
+
+with tabs[1]:
+    st.markdown((ROOT / "docs" / "model_card.md").read_text())
+
+with tabs[2]:
+    st.markdown(f"""
+- **Split:** stratified 80/20, seed {R['seed']}: {R['split']['train']:,} training and {R['split']['test']:,} test
+  records. The test set is used once per model, after all choices are made.
+- **Cross-validation:** stratified 5-fold on the training split. Every learned step (scaler, encoder, model,
+  calibrator) is fit inside each training fold; calibrators use a further internal 3-fold split, so no
+  out-of-fold probability comes from a model that saw that record.
+- **Metrics:** accuracy, precision, recall and F1 at 0.50; ROC-AUC and PR-AUC for ranking; log loss and Brier
+  for probability quality. Selection never uses accuracy alone or the test set.
+- **Calibration:** raw, sigmoid (Platt) and isotonic variants of every model are compared on out-of-fold
+  Brier and log loss.
+- **Uncertainty:** paired percentile bootstrap (1,000 resamples) on test predictions.
+- **Subgroups:** gender and age bands 29–39, 40–49, 50–59, 60–65; groups with fewer than 30 records of either
+  class would be reported without metrics.
+- **Explainability:** exact SHAP for the logistic-regression score; permutation importance (ROC-AUC, 10
+  repeats, test set); partial dependence and ICE on 2,000 test records restricted to valid inputs; XGBoost
+  SHAP interaction values on 1,000 test records.
+- **Reproduce:** `python -m src.train_models && python -m src.analysis`. Detailed numbers: `docs/evaluation.md`.
+""")
+
+with tabs[3]:
+    st.markdown("""
+- **Not clinically validated.** One public dataset with limited provenance; about 0.79 ROC-AUC. Calibration
+  aligns probabilities with this dataset's labels, not with any clinical population.
+- **Self-reported and coarse inputs.** Smoking, alcohol and activity are self-reported; cholesterol and glucose
+  are three-level categories, not lab values.
+- **Confounded patterns.** Smoking and alcohol show slightly lower label rates in this data, so the model can
+  move the estimate lower for them. This is model behaviour, never medical evidence.
+- **Weaker in older ages.** ROC-AUC is about 0.69 for ages 60–65 versus about 0.82 for 40–49.
+- **Explanations describe the model.** SHAP, permutation importance, partial dependence and what-if results are
+  about this trained model, not about causes of disease. Correlated inputs (systolic/diastolic) share credit.
+- **Prototype bands and thresholds.** The <30/30–60/≥60% bands and the 0.50 threshold are presentation and
+  analysis devices, not clinical cut-offs.
+- **Age coverage.** Inputs are restricted to ages 29–65, the range covered by the data.
+""")
+footer()

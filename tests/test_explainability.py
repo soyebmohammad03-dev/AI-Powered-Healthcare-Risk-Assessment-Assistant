@@ -2,6 +2,7 @@ import ast
 import math
 from dataclasses import asdict
 
+import numpy as np
 import pytest
 
 from src.data_loader import ROOT, load_dataset, split
@@ -39,10 +40,13 @@ def test_local_explanation_is_consistent_with_prediction(explainer, bundle, labe
     e, p = explainer.explain(patient), predict(patient, bundle)
     assert len(e.contributions) == len(MODEL_FEATURES)
     assert {c.feature for c in e.contributions} == set(MODEL_FEATURES)
-    # Additivity: base + contributions == the classifier's own log-odds, and its sigmoid == predict()
+    # Additivity: base + contributions == the logistic regression's own score (log-odds) ...
     assert e.base_value + sum(c.shap_value for c in e.contributions) == pytest.approx(e.model_output)
-    assert e.model_output == pytest.approx(bundle["pipeline"].decision_function(patient.to_frame())[0])
+    Z = bundle["pipeline"].named_steps["pre"].transform(patient.to_frame())
+    assert e.model_output == pytest.approx(explainer.lr.decision_function(Z)[0])
+    # ... and calibrating that score reproduces the prediction service exactly
     assert e.probability_positive == pytest.approx(p.probability_positive)
+    assert explainer.score_to_probability(e.model_output) == pytest.approx(p.probability_positive)
     assert sum(c.relative_importance for c in e.contributions) == pytest.approx(1.0)
     magnitudes = [abs(c.shap_value) for c in e.contributions]
     assert magnitudes == sorted(magnitudes, reverse=True)
@@ -50,7 +54,7 @@ def test_local_explanation_is_consistent_with_prediction(explainer, bundle, labe
 
 def test_shap_values_match_closed_form(explainer, bundle):
     """Independent check (no SHAP): for a linear model, SHAP_j = coef_j * (x_j - mean_j over background)."""
-    pre, clf = bundle["pipeline"].named_steps["pre"], bundle["pipeline"].named_steps["clf"]
+    pre, clf = bundle["pipeline"].named_steps["pre"], explainer.lr  # the LR inside the calibrator
     background = pre.transform(split(load_dataset())[0])
     patient = DEMO_INPUTS["Example Patient C"]
     per_column = clf.coef_[0] * (pre.transform(patient.to_frame())[0] - background.mean(axis=0))
@@ -112,3 +116,15 @@ def test_no_hardcoded_shap_numbers():
     tree = ast.parse((ROOT / "src" / "explainability.py").read_text())
     floats = {n.value for n in ast.walk(tree) if isinstance(n, ast.Constant) and isinstance(n.value, float)}
     assert floats <= {0.0, 1.0}
+
+
+def test_calibration_is_monotone_and_explained_separately(explainer):
+    """Isotonic calibration never reverses a contribution's direction: a higher score never gives a
+    lower probability."""
+    scores = np.linspace(-6, 6, 400)
+    probs = [explainer.score_to_probability(z) for z in scores]
+    assert all(b >= a for a, b in zip(probs, probs[1:]))
+    assert 0 <= probs[0] <= probs[-1] <= 1
+    e = explainer.explain(DEMO_INPUTS["Example Patient C"])
+    assert e.uncalibrated_probability == pytest.approx(1 / (1 + math.exp(-e.model_output)))
+    assert explainer.base_probability == pytest.approx(explainer.score_to_probability(explainer.base_value))

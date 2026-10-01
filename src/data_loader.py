@@ -45,13 +45,20 @@ def clean(raw: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
 
     Output columns: FEATURES + TARGET, age in years. `id` is dropped: an identifier, never a feature.
     """
+    df, removed, _ = clean_with_exclusions(raw)
+    return df, removed
+
+
+def clean_with_exclusions(raw: pd.DataFrame) -> tuple[pd.DataFrame, dict, dict]:
+    """As clean(), plus the excluded rows themselves per rule (for the data-quality report)."""
     df = raw.drop(columns="id").apply(pd.to_numeric, errors="coerce")
     df["age"] = df["age"] / 365.25  # days -> years
-    removed = {}
+    removed, excluded = {}, {}
 
     def drop(rule: str, bad: pd.Series):
         nonlocal df
         removed[rule] = int(bad.sum())
+        excluded[rule] = df[bad]
         df = df[~bad]
 
     drop("malformed_or_missing", df.isna().any(axis=1))
@@ -64,7 +71,7 @@ def clean(raw: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     drop("bmi_out_of_range", ~bmi(df["height"], df["weight"]).between(*PLAUSIBLE["bmi"]))
 
     df = df.astype({c: int for c in [*CATEGORIES, TARGET]}).reset_index(drop=True)
-    return df[FEATURES + [TARGET]], removed
+    return df[FEATURES + [TARGET]], removed, excluded
 
 
 def load_dataset(path: Path = DATA_PATH) -> pd.DataFrame:

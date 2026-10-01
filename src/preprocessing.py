@@ -68,6 +68,15 @@ def add_bmi(X: pd.DataFrame) -> pd.DataFrame:
     return X.assign(bmi=bmi(X["height"], X["weight"]))
 
 
+def plausible_mask(X: pd.DataFrame) -> pd.Series:
+    """Vectorised version of the input-domain rules (ranges, systolic > diastolic, plausible BMI)."""
+    ok = X["ap_hi"] > X["ap_lo"]
+    for col, (low, high) in PLAUSIBLE.items():
+        values = bmi(X["height"], X["weight"]) if col == "bmi" else X[col]
+        ok &= values.between(low, high)
+    return ok
+
+
 def build_preprocessor() -> Pipeline:
     """Raw FEATURES -> add BMI -> scale numerics, one-hot categoricals (height/weight dropped).
 
