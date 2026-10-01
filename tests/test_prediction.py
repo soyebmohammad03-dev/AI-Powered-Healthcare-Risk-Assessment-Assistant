@@ -6,14 +6,12 @@ from dataclasses import asdict, replace
 import joblib
 import numpy as np
 import pytest
-from sklearn.model_selection import train_test_split
 
-from src.data_loader import ROOT, TARGET, load_dataset
+from src.data_loader import ROOT, load_dataset, split
 from src.evaluate_models import evaluate
 from src.prediction import (DEMO_INPUTS, FINAL_MODEL_PATH, InvalidInputError, ModelArtifactError,
                             PatientInput, load_model, predict)
 from src.preprocessing import FEATURES, build_preprocessor
-from src.train_models import SEED
 
 VALID = asdict(DEMO_INPUTS["Example Patient B"])
 
@@ -56,8 +54,7 @@ def test_matches_pipeline_and_ignores_key_order(bundle):
 def test_persisted_model_is_the_evaluated_model(bundle):
     """Same split + same preprocessing as training reproduces the stored test metrics exactly."""
     df = load_dataset()
-    _, X_test, _, y_test = train_test_split(df[FEATURES], df[TARGET], test_size=0.2,
-                                            stratify=df[TARGET], random_state=SEED)
+    _, X_test, _, y_test = split(df)
     got = evaluate(bundle["pipeline"], X_test, y_test)
     assert got == bundle["test_metrics"]
     saved = json.loads((ROOT / "artifacts" / "metrics.json").read_text())
@@ -66,8 +63,7 @@ def test_persisted_model_is_the_evaluated_model(bundle):
 
 def test_inference_preprocessing_equals_training_preprocessing(bundle):
     df = load_dataset()
-    X_train, X_test, y_train, _ = train_test_split(df[FEATURES], df[TARGET], test_size=0.2,
-                                                   stratify=df[TARGET], random_state=SEED)
+    X_train, X_test, _, _ = split(df)
     fresh = build_preprocessor().fit(X_train)
     np.testing.assert_array_equal(fresh.transform(X_test), bundle["pipeline"].named_steps["pre"].transform(X_test))
 

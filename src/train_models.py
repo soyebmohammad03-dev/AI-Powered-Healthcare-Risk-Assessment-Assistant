@@ -9,16 +9,15 @@ import sklearn
 import xgboost
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import StratifiedKFold, cross_validate, train_test_split
+from sklearn.model_selection import StratifiedKFold, cross_validate
 from sklearn.pipeline import Pipeline
 from xgboost import XGBClassifier
 
-from src.data_loader import ROOT, TARGET, URL, load_dataset
+from src.data_loader import ROOT, SEED, TARGET, URL, load_dataset, split
 from src.evaluate_models import CV_SCORING, evaluate
 from src.prediction import FINAL_MODEL_PATH
 from src.preprocessing import CATEGORICAL, CATEGORIES, FEATURES, NUMERIC, build_preprocessor
 
-SEED = 42
 MODELS_DIR = ROOT / "models"
 ARTIFACTS_DIR = ROOT / "artifacts"
 # Fixed decision (see docs/methodology.md): best 5-fold CV ROC-AUC, accuracy, precision and F1,
@@ -52,8 +51,7 @@ def dataset_summary(df) -> dict:
 
 def main() -> dict:
     df = load_dataset()
-    X, y = df[FEATURES], df[TARGET]
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, stratify=y, random_state=SEED)
+    X_train, X_test, y_train, y_test = split(df)
     cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=SEED)
 
     MODELS_DIR.mkdir(exist_ok=True)

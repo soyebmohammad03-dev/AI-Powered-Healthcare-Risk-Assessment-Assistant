@@ -4,6 +4,9 @@ import urllib.request
 from pathlib import Path
 
 import pandas as pd
+from sklearn.model_selection import train_test_split
+
+from src.preprocessing import FEATURES
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA_PATH = ROOT / "data" / "processed.cleveland.data"
@@ -14,6 +17,7 @@ SHA256 = "a74b7efa387bc9d108d7d0115d831fe9b414b29ae7124f331b622b4efa0427c8"
 COLUMNS = ["age", "sex", "cp", "trestbps", "chol", "fbs", "restecg",
            "thalach", "exang", "oldpeak", "slope", "ca", "thal", "num"]
 TARGET = "target"
+SEED = 42
 
 
 def download(path: Path = DATA_PATH) -> Path:
@@ -31,3 +35,8 @@ def load_dataset(path: Path = DATA_PATH) -> pd.DataFrame:
     df = pd.read_csv(download(path), header=None, names=COLUMNS, na_values="?")
     df[TARGET] = (df.pop("num") > 0).astype(int)
     return df
+
+
+def split(df: pd.DataFrame):
+    """The project's one train/test split: stratified 80/20, seed 42. Returns X_train, X_test, y_train, y_test."""
+    return train_test_split(df[FEATURES], df[TARGET], test_size=0.2, stratify=df[TARGET], random_state=SEED)

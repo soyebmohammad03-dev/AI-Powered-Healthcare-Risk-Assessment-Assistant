@@ -19,6 +19,32 @@ CATEGORIES = {
 CATEGORICAL = list(CATEGORIES)
 FEATURES = NUMERIC + CATEGORICAL
 
+# Human-readable names and code meanings (same source as above), for explanations and the UI.
+FEATURE_LABELS = {
+    "age": "Age",
+    "sex": "Sex",
+    "cp": "Chest pain type",
+    "trestbps": "Resting blood pressure",
+    "chol": "Cholesterol",
+    "fbs": "Fasting blood sugar > 120 mg/dl",
+    "restecg": "Resting ECG",
+    "thalach": "Maximum heart rate",
+    "exang": "Exercise-induced angina",
+    "oldpeak": "ST depression (exercise vs rest)",
+    "slope": "Slope of peak exercise ST segment",
+    "ca": "Major vessels coloured by fluoroscopy",
+    "thal": "Thallium stress test",
+}
+CATEGORY_LABELS = {
+    "sex": {0: "Female", 1: "Male"},
+    "cp": {1: "Typical angina", 2: "Atypical angina", 3: "Non-anginal pain", 4: "Asymptomatic"},
+    "fbs": {0: "No", 1: "Yes"},
+    "restecg": {0: "Normal", 1: "ST-T wave abnormality", 2: "Left ventricular hypertrophy"},
+    "exang": {0: "No", 1: "Yes"},
+    "slope": {1: "Upsloping", 2: "Flat", 3: "Downsloping"},
+    "thal": {3: "Normal", 6: "Fixed defect", 7: "Reversible defect"},
+}
+
 
 def build_preprocessor() -> ColumnTransformer:
     # Imputers only matter for the 6 missing ca/thal values; they are fit on training data only.

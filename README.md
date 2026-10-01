@@ -11,7 +11,7 @@ Theme: Healthcare + Human-Centered AI + Explainable AI.
 |---|---|---|
 | 1 | Dataset acquisition, inspection, preprocessing, baseline training & evaluation | Done |
 | 2 | Model selection, persistence, prediction pipeline | Done |
-| 3 | SHAP explainability | Planned |
+| 3 | SHAP explainability | Done |
 | 4 | Rule-based informational guidance | Planned |
 | 5 | Streamlit application | Planned |
 | 6 | Integration, testing, demo preparation | Planned |
@@ -136,6 +136,64 @@ To check the saved artifact and score the demo inputs:
 python -m src.prediction
 ```
 
+To explain the demo inputs and print global importance:
+
+```bash
+python -m src.explainability
+```
+
+## Explainable AI (SHAP)
+
+A **prediction** answers "what does the model estimate for this input?". An **explanation** answers "which inputs moved that estimate, and by how much?". `src/prediction.py` produces the prediction, and `src/explainability.py` explains it. The two modules are separate, but they use the same saved model and the same `PatientInput` validation.
+
+**SHAP** (SHapley Additive exPlanations) splits one prediction into one contribution per feature. It is based on Shapley values from game theory. SHAP values are additive:
+
+```
+base value + sum of all feature contributions = model output
+```
+
+- **Explainer:** `shap.LinearExplainer` is SHAP's explainer for linear models. It is exact and fast. For each preprocessed column it computes `coefficient × (patient value − average training value)`.
+- **Background:** the explainer's reference data is the 242 preprocessed training records, all of them, with no subsampling.
+- **Units:** the values are in **log-odds**, which is what logistic regression computes before converting to a probability. They are not percentages. The base value is −0.071 log-odds: the model's output at the average training record, which converts to a probability of 0.482. Converting `base + Σ contributions` to a probability gives exactly the probability returned by `predict()`.
+- **Local explanation:** `explain(patient)` returns a `LocalExplanation`. It contains one `FeatureContribution` per original feature, sorted from largest effect to smallest. Each contribution has:
+  - the readable label and the patient's input value;
+  - the SHAP value;
+  - its direction (`toward_positive`, `toward_negative` or `neutral`);
+  - its share of the total effect;
+  - a careful sentence describing it.
+- **Global explanation:** `default_explainer().global_importance()` ranks the features by mean |SHAP| across all 303 records.
+- **Readable feature names:** preprocessing turns the 13 features into 22 columns, because one-hot encoding splits each categorical feature into several columns. For each feature, the explainer reads from the fitted encoder how many columns it produced, and checks this against the column names. It then **adds up** each feature's column contributions. Adding is valid because SHAP values are additive, so "Chest pain type" is shown as one contribution, not four encoded columns. Readable labels come from `FEATURE_LABELS` and `CATEGORY_LABELS` in `src/preprocessing.py`.
+
+Global importance of the final model (mean |SHAP|, log-odds, all 303 records, from `python -m src.explainability`):
+
+| Rank | Feature | Mean \|SHAP\| | Share |
+|---|---|---|---|
+| 1 | Major vessels coloured by fluoroscopy (`ca`) | 0.985 | 20.7% |
+| 2 | Thallium stress test (`thal`) | 0.651 | 13.7% |
+| 3 | Chest pain type (`cp`) | 0.637 | 13.4% |
+| 4 | Sex | 0.560 | 11.8% |
+| 5 | Slope of peak exercise ST segment | 0.508 | 10.7% |
+| 6 | Maximum heart rate | 0.289 | 6.1% |
+| 7 | Resting blood pressure | 0.255 | 5.4% |
+| 8 | Exercise-induced angina | 0.239 | 5.0% |
+| 9 | Resting ECG | 0.198 | 4.2% |
+| 10 | ST depression | 0.170 | 3.6% |
+| 11 | Cholesterol | 0.133 | 2.8% |
+| 12 | Age | 0.076 | 1.6% |
+| 13 | Fasting blood sugar | 0.050 | 1.1% |
+
+```python
+from src.explainability import explain, default_explainer
+from src.prediction import DEMO_INPUTS
+
+e = explain(DEMO_INPUTS["Example Patient C"])
+for c in e.contributions[:3]:
+    print(c.label, c.display_value, round(c.shap_value, 3), c.text)
+ranking = default_explainer().global_importance()
+```
+
+**SHAP explains the model, not medicine.** A contribution means the feature moved *this model's* output for this input. It is not evidence that the feature causes disease. Wording used: "Cholesterol (245) contributed toward a higher model-estimated probability for this input". It never says "cholesterol caused…".
+
 ## Setup
 
 Requires **Python 3.12**. The pinned versions were tested on 3.12; Python 3.14 is not recommended for SHAP/XGBoost wheels.
@@ -178,6 +236,7 @@ src/preprocessing.py    Feature lists, category codes, preprocessing pipeline
 src/evaluate_models.py  Metrics
 src/train_models.py     Training, cross-validation, test evaluation, saving
 src/prediction.py       Input contract, artifact loading/checks, inference, demo inputs
+src/explainability.py   SHAP local explanations and global importance
 tests/                  Automated tests
 docs/methodology.md     Methodology notes
 ```
@@ -187,5 +246,6 @@ docs/methodology.md     Methodology notes
 - The dataset is small (303 records), comes from a single centre, dates from 1988, and is 68% male. Results may not generalize to other populations.
 - The input bounds only check that values are plausible. Values outside the training data's observed range (see `src/prediction.py`) are accepted but are extrapolation.
 - The model files are pickles tied to the pinned scikit-learn version; retrain after upgrading it.
+- SHAP explanations describe how this model behaves on this dataset. They do not show causation. With correlated features (for example `thal` and `ca`), credit can be split between them in ways that do not match their clinical meaning. Global importance reflects this 303-record population only.
 - The target is a historical angiographic label. It is not a forecast of future cardiac events.
 - Predictions use a 0.5 threshold on the dataset target. Any risk categories added later will be prototype bands derived from model probability. They are not clinically validated thresholds.

@@ -126,12 +126,12 @@ def load_model(path: Path = FINAL_MODEL_PATH) -> dict:
 
 
 @lru_cache(maxsize=1)
-def _default_model() -> dict:
+def default_model() -> dict:
     return load_model()
 
 
 def predict(patient: PatientInput, model: dict | None = None) -> PredictionResult:
-    model = model or _default_model()
+    model = model or default_model()
     proba = model["pipeline"].predict_proba(patient.to_frame())[0]
     classes = list(model["pipeline"].classes_)
     p_pos = float(proba[classes.index(1)])

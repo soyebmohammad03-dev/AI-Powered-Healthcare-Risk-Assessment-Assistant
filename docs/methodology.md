@@ -46,3 +46,32 @@ Training data and inference input are handled differently in two ways:
 - **Input validation:** inference input is checked by the `PatientInput` contract. Values must be numeric, categorical codes must be documented ones, and numeric values must fall within sanity bounds before they reach the model.
 
 The `predicted_class` uses a 0.5 probability threshold on the dataset target. No clinical risk thresholds are defined in this layer.
+
+## Explainability (SHAP)
+**Why.** A probability on its own is not enough for a human-centred healthcare prototype. A user also needs to see which inputs moved the model's estimate. SHAP provides this. It is grounded in Shapley values from game theory, and its contributions are additive: the base value plus the sum of all contributions equals the model output exactly.
+
+**Explainer.** The final model is a logistic regression, so `shap.LinearExplainer` is used. It is SHAP's model-specific explainer for linear models.
+- It explains the classifier on its real inputs, which are the 22 preprocessed columns.
+- It uses an `Independent` masker whose background is all 242 preprocessed training records. The default would subsample 100 of them; this is disabled.
+- With this setup, each column's SHAP value is `coef_j × (x_j − mean_j)`. A test recomputes this formula without SHAP and checks that the values match.
+
+**Output space.** The values are log-odds, which is the scale of `decision_function`, not probabilities.
+- The base value (−0.071 log-odds) is the model's output at the mean of the preprocessed training data. Converted to a probability it is 0.482.
+- For any input, `sigmoid(base + Σ SHAP)` equals the probability returned by the prediction service. Tests check this.
+- Contributions should therefore be read as "pushed the estimate up" or "pushed the estimate down", not as percentage points.
+
+**Mapping columns back to features.** The preprocessing turns each numeric feature into one scaled column. Each categorical feature becomes one column per category, except binary features, which become a single column.
+- The explainer reads each feature's column count from the fitted `OneHotEncoder` (`categories_`, `drop_idx_`).
+- It checks the result against `get_feature_names_out()`.
+- It sums the column SHAP values belonging to each original feature. Summing is exact because SHAP is additive.
+- Each feature's sum is reported once, with its readable label and the patient's original value. For example, "Chest pain type: Asymptomatic" replaces `cat__cp_4.0`.
+
+**Local and global explanations.**
+- **Local:** one patient's per-feature contributions, ranked by size. Each contribution also gets a direction and a share of the total absolute contribution.
+- **Global:** the mean absolute grouped SHAP value per feature across all 303 records, ranked. Rows are grouped by feature before taking absolute values, so a feature's one-hot columns cannot cancel each other or be double counted.
+
+**Limitations.**
+- SHAP explains the trained model's behaviour, not human physiology. A large contribution is not evidence of medical causation.
+- With an independent background, correlated features (for example `ca`, `thal`, `exang`, `oldpeak`) are treated as if they varied separately. Credit can therefore be shared among them in clinically unintuitive ways.
+- Explanations inherit every limitation of the model and the dataset.
+- User-facing wording therefore always says that a feature "contributed toward the model's estimate".
