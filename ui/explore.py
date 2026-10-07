@@ -5,14 +5,15 @@ import streamlit as st
 from src.prediction import InvalidInputError
 from src.preprocessing import CATEGORY_LABELS, FEATURE_LABELS, PLAUSIBLE
 from src.what_if import ADJUSTABLE, changes_from, compare, response_curve
-from ui.core import (MODEL_NAMES, artifact, chart, engine, footer, kpis, note, page_header, readable, require_assessment, section,
-                     step_note, tokens)
+from ui.core import (MODEL_NAMES, artifact, assessment_context, chart, engine, footer, kpis, note, page_header, readable,
+                     require_assessment, section, step_note, tokens)
 
 patient, result, _, _ = require_assessment()
 bundle, _ = engine()
 t = tokens()
 page_header("Explore", "Explore what changes the model estimate",
             "Change selected inputs and compare the model's estimate with your assessment.")
+assessment_context(patient, result, "explore")
 note("<b>This is model sensitivity analysis, not a predicted medical outcome.</b> It shows how the trained "
      "model's estimate responds when one or more inputs change while all other inputs stay fixed.")
 

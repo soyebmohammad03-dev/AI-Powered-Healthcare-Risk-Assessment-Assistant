@@ -7,14 +7,15 @@ import streamlit as st
 
 from src import reliability as rel
 from src.explainability import NEGATIVE, POSITIVE
-from ui.core import (MODEL_NAMES, artifact, candidates, chart, conformity, engine, footer, kpis, note, page_header,
-                     require_assessment, section, stability_for, tokens)
+from ui.core import (MODEL_NAMES, PAGES, artifact, assessment_context, candidates, chart, conformity, engine, footer,
+                     kpis, note, page_header, require_assessment, section, stability_for, tokens)
 
 patient, result, explanation, _ = require_assessment()
 bundle, explainer = engine()
 t = tokens()
 page_header("Explain", "Why did the model estimate this probability?",
             "How the trained model weighted each of your inputs for this assessment.")
+assessment_context(patient, result, "explain")
 
 kpis([
     ("Reference baseline", f"{explanation.base_probability:.1%}", "average record in the training data"),
@@ -143,4 +144,10 @@ with st.expander("What these signals mean"):
         "XGBoost, compared with the spread on the held-out test records.\n"
         "- **Calibration status:** how closely this model's probabilities matched observed frequencies in "
         "cross-validation on this dataset. It is not clinical accuracy.")
+
+if "explore" in PAGES:
+    section("Next step")
+    st.markdown("See how the model estimate responds when you change blood pressure, weight, laboratory values or "
+                "lifestyle inputs.")
+    st.page_link(PAGES["explore"], label="Explore what changes the model estimate", icon=":material/tune:")
 footer()

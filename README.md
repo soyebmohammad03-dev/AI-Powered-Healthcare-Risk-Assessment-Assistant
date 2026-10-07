@@ -22,8 +22,8 @@ The app has five areas in a top navigation bar. Each area is a page script in `u
 
 | Area | What it is for |
 |---|---|
-| **Assess** | Product header and a prominent educational disclaimer above a grouped input form (Demographics, Body measurements, Blood pressure, Laboratory indicators, Lifestyle) with three synthetic examples. **Run Assessment** shows the model-estimated probability as the headline (with a note when it lies within 3 pp of a band boundary or the 0.50 threshold), a "What the model does not know" panel, the prototype estimate band, and secondary information (model, calibration status, input conformity, reference baseline, class at 0.50). It also shows a short "How the model arrived here" preview, general guidance and an input summary. Unusual inputs get a caution; they are never blocked. |
-| **Explain** | The full SHAP explanation of the current assessment. It opens with a plain-language summary, then shows the reference baseline, this estimate and the difference between them; a diverging contribution chart with ▲/▼ markers, so direction does not rely on colour; and a note that model contribution ≠ medical causation. The **Assessment reliability** panel shows probability, input conformity, explanation stability, model disagreement and calibration status as separate signals, with no combined score. |
+| **Assess** | Product header, a prominent educational disclaimer and a strip of headline research facts read from the artifacts (cleaned records, candidate models and CV splits, held-out ROC-AUC with its bootstrap interval, exact SHAP), above a grouped input form (Demographics, Body measurements, Blood pressure, Laboratory indicators, Lifestyle) with three synthetic examples, each with a one-line profile. Before the first assessment the result panel explains the Assess → Explain → Explore flow. **Run Assessment** shows the model-estimated probability as the headline (with a note when it lies within 3 pp of a band boundary or the 0.50 threshold), a "What the model does not know" panel, the prototype estimate band, and secondary information (model, calibration status, input conformity, reference baseline, class at 0.50). It also shows a short "How the model arrived here" preview, general guidance and an input summary. Unusual inputs get a caution; they are never blocked. |
+| **Explain** | The full SHAP explanation of the current assessment. An *assessment in view* bar shows the estimate, the main inputs and whether they are a synthetic example, with links to edit the inputs or continue to Explore. It opens with a plain-language summary, then shows the reference baseline, this estimate and the difference between them; a diverging contribution chart with ▲/▼ markers, so direction does not rely on colour; and a note that model contribution ≠ medical causation. The **Assessment reliability** panel shows probability, input conformity, explanation stability, model disagreement and calibration status as separate signals, with no combined score. Without an assessment, Explain and Explore offer links back to Assess and one-click synthetic examples. |
 | **Explore** | What-if (model sensitivity) analysis. Change systolic or diastolic BP, weight, cholesterol, glucose, smoking, activity or alcohol, and compare baseline, scenario and change in percentage points, with the direction stated. A note, read from the robustness analysis, warns when the model is non-monotone in the plotted input. It also shows each change on its own and the model estimate across one input. Impossible combinations are rejected, and the stored assessment is never modified. |
 | **Model** | A scope note (dataset and protocol, not clinical performance), then tabs for Overview (repeated-CV comparison, stability box plots, selection protocol), Calibration (reliability diagram with bin counts, ECE, slope and intercept), ROC & PR, Thresholds (0.05–0.95, decision trade-off, net benefit), Explainability, Subgroups (with intervals), Uncertainty (bootstrap) and Robustness (novelty, stability, monotonicity, disagreement, synthetic shift). |
 | **Methodology** | Pipeline diagram, Data Quality Lab (exclusions with examples, ranges, distributions, correlations), model card, validation strategy, limitations, and a **Scope & human-centred design** tab mapping each user question (what it knows, predicts, does not know, where it is uncertain) to where the app answers it. |
@@ -121,7 +121,7 @@ ui/core.py              design tokens, cached resources, shared components
 ui/{assess,explain,explore,model,methodology}.py   the five pages
 docs/                   RESEARCH_VALIDATION.md, methodology.md, evaluation.md, model_card.md
 scripts/setup.sh        fresh-clone setup and full regeneration
-tests/                  156 tests (data, models, evaluation, selection, reliability, prediction, SHAP, what-if, guidance, UI)
+tests/                  161 tests (data, models, evaluation, selection, reliability, prediction, SHAP, what-if, guidance, UI)
 ```
 
 The rule-based guidance engine (`src/recommendations.py`) uses fixed, transparent rules on the user's inputs and the probability band, with no LLM. It never states a condition or names a treatment. A lower estimate is described as "does not rule out any health condition".
@@ -191,7 +191,7 @@ The dataset is not committed. `src/data_loader.py` downloads it from Kaggle's pu
 python -m pytest -q
 ```
 
-The suite contains 156 tests. It covers:
+The suite contains 161 tests. It covers:
 - metric definitions and invariants (threshold metrics are consistent, recall never rises with the threshold, net-benefit formula);
 - repeated CV (fixed seed, 25 disjoint splits, each row validated once per repeat) and out-of-fold leakage (a memorising model on random labels scores at chance);
 - test-set integrity: the final pipeline and calibrators are reproduced from training rows alone, the selection ignores scrambled test numbers, no threshold is tuned, and the novelty detector is fitted and chosen on training rows only;
@@ -201,7 +201,7 @@ The suite contains 156 tests. It covers:
 - SHAP reconciling with the model score and probability for every candidate model, within 1e-5;
 - what-if guardrails, the baseline being reproduced, and response curves staying in the valid domain;
 - guidance language;
-- every UI page driven through Streamlit's `AppTest`;
+- every UI page driven through Streamlit's `AppTest`, including the landing evidence read from the artifacts and starting an assessment from a synthetic example on Explain or Explore;
 - portability: no machine-specific paths in tracked files, pinned requirements, provenance in committed artifacts, and stale model files rejected.
 
 ## Intended use and limitations

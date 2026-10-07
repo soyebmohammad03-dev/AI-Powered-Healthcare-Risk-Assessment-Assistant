@@ -15,9 +15,9 @@ from src import prediction, reliability as rel
 from src.analysis import ARTIFACT
 from src.data_loader import ROOT
 from src.explainability import ModelExplainer
-from src.prediction import ModelArtifactError, PatientInput, load_model
-from src.preprocessing import CATEGORY_LABELS
-from src.recommendations import DISCLAIMER, HIGHER_FROM, LOWER_BELOW
+from src.prediction import DEMO_INPUTS, ModelArtifactError, PatientInput, load_model, predict
+from src.preprocessing import CATEGORY_LABELS, FEATURES
+from src.recommendations import DISCLAIMER, HIGHER_FROM, LOWER_BELOW, generate
 
 TRAIN_COMMAND = ("python -m src.train_models && python -m src.analysis && python -m src.reliability "
                  "&& python -m src.shift_analysis")
@@ -81,6 +81,17 @@ h1 {{ letter-spacing: -0.02em; }}
 .step-n {{ font-size: .68rem; color: {t['primary']}; font-weight: 700; letter-spacing: .08em; }}
 .step-t {{ font-weight: 600; font-size: .92rem; color: {t['text']}; }}
 .step-d {{ font-size: .78rem; color: {t['muted']}; line-height: 1.35; margin-top: .15rem; }}
+.evidence-note {{ font-size: .78rem; color: {t['faint']}; margin: .35rem 0 .2rem 0; }}
+.context-bar {{ display: flex; flex-wrap: wrap; align-items: center; gap: .4rem 1rem; border: 1px solid {t['border']};
+               border-radius: .5rem; padding: .6rem 1rem; background: {t['surface']}; margin: .2rem 0 .6rem 0; }}
+.context-p {{ font-size: 1.35rem; font-weight: 650; font-variant-numeric: tabular-nums; color: {t['text']}; }}
+.context-in {{ font-size: .86rem; color: {t['muted']}; flex: 1 1 320px; }}
+.flow {{ margin: .4rem 0 0 0; padding: 0; list-style: none; counter-reset: flow; }}
+.flow li {{ counter-increment: flow; position: relative; padding: .1rem 0 .55rem 2rem; font-size: .9rem; color: {t['muted']}; }}
+.flow li::before {{ content: counter(flow); position: absolute; left: 0; top: .05rem; width: 1.35rem; height: 1.35rem;
+                   border-radius: 50%; border: 1px solid {t['primary']}; color: {t['primary']}; font-size: .74rem;
+                   font-weight: 700; display: flex; align-items: center; justify-content: center; }}
+.flow b {{ color: {t['text']}; }}
 .tagline {{ font-size: 1.15rem; font-weight: 600; color: {t['primary']}; margin: -.2rem 0 .6rem 0; }}
 .foot b {{ color: {t['muted']}; }}
 @media (max-width: 760px) {{
@@ -207,8 +218,10 @@ def band_bar(p: float) -> str:
     t = tokens()
     lo, hi = LOWER_BELOW * 100, HIGHER_FROM * 100
     a, b, c = t["track"]
+    label = (f"Estimate {p:.1%}, in the {band_name(p)} band. Bands: Lower below {lo:.0f}%, Moderate "
+             f"{lo:.0f}–{hi:.0f}%, Higher from {hi:.0f}%.")
     return f"""
-<div style="position:relative;margin:.9rem 0 .2rem 0">
+<div role="img" aria-label="{label}" style="position:relative;margin:.9rem 0 .2rem 0">
   <div style="display:flex;height:10px;border-radius:5px;overflow:hidden">
     <div style="width:{lo}%;background:{a}"></div><div style="width:{hi - lo}%;background:{b}"></div><div style="flex:1;background:{c}"></div>
   </div>
@@ -251,13 +264,88 @@ def chart(fig: go.Figure, height: int = 360, **layout):
                     config={"displayModeBar": False})
 
 
+def assess(patient: PatientInput, bundle, explainer):
+    """Run one assessment and store it; every page reads it from session state."""
+    result = predict(patient, bundle)
+    explanation = explainer.explain(patient)
+    st.session_state["assessment"] = (patient, result, explanation, generate(patient, result, explanation))
+
+
+def example_label(patient: PatientInput) -> str | None:
+    """The synthetic example these inputs are identical to, if any."""
+    return next((label.replace("Example Patient", "Example") for label, p in DEMO_INPUTS.items() if p == patient),
+                None)
+
+
+def profile(patient: PatientInput, short: bool = False) -> str:
+    """One-line, human-readable summary of the main inputs."""
+    text = f"{patient.age:g} years · {readable('gender', patient.gender)} · BP {patient.ap_hi:g}/{patient.ap_lo:g}"
+    return text if short else f"{text} mmHg · cholesterol {readable('cholesterol', patient.cholesterol).lower()}"
+
+
+def load_example(label: str):
+    """Assess a synthetic example from a page other than Assess (button callback)."""
+    for name in FEATURES:
+        st.session_state.pop(name, None)  # the Assess form then restores these inputs from the assessment
+    bundle, explainer = engine()
+    assess(DEMO_INPUTS[label], bundle, explainer)
+
+
+def evidence_strip():
+    """Headline research facts for the landing header, read from the generated artifacts."""
+    m, a = artifact("metrics.json"), artifact("analysis.json")
+    if not (m and a):
+        return
+    final = m["selection"]["model"]
+    k = m["cv"]["n_splits"] * m["cv"]["n_repeats"]
+    auc = a["bootstrap"]["models"][final]["roc_auc"]
+    kpis([
+        ("Cleaned records", f"{m['dataset']['clean_records']:,}", "one public dataset, documented cleaning rules"),
+        ("Candidate models", f"{len(m['comparison'])}",
+         f"compared on {k} CV splits with pre-declared tests (α = {m['selection']['alpha']:g}); "
+         f"{MODEL_NAMES[final]} selected"),
+        ("Held-out ROC-AUC", f"{auc['estimate']:.3f}",
+         f"{a['bootstrap']['level']:.0%} CI {auc['lower']:.3f}–{auc['upper']:.3f}, {a['test_rows']:,} test records"),
+        ("Explanations", "Exact SHAP", "per-input contributions for every assessment"),
+    ])
+    st.html("<div class='evidence-note'>Research measurements on one public dataset, not clinical performance. "
+            "Details on <b>Model</b> and <b>Methodology</b>.</div>")
+
+
+def assessment_context(patient: PatientInput, result, current: str):
+    """Which assessment this page is about, and links to the rest of the Assess → Explain → Explore flow."""
+    band = band_name(result.probability_positive)
+    color = band_color(band)
+    example = example_label(patient)
+    source = (f"<span class='chip'>Synthetic {escape(example)} · not a real patient</span>" if example
+              else "<span class='chip'>Your inputs</span>")
+    st.html(f"<div class='context-bar' role='group' aria-label='Assessment in view'>"
+            f"<span class='meta-k'>Assessment in view</span>"
+            f"<span class='context-p'>{result.probability_positive:.1%}</span>"
+            f"<span class='chip' style='color:{color};border-color:{color}'>{band.upper()}</span>"
+            f"<span class='context-in'>{escape(profile(patient))} · BMI {result.bmi:.1f}</span>{source}</div>")
+    links = [("assess", "Edit inputs on Assess", ":material/edit:")]
+    links += [("explore", "Next: test what-ifs on Explore", ":material/tune:")] if current == "explain" else \
+        [("explain", "Back to the explanation", ":material/insights:")]
+    cols = st.columns(len(links) + 1)
+    for col, (page, label, icon) in zip(cols, links):
+        if page in PAGES:
+            col.page_link(PAGES[page], label=label, icon=icon)
+
+
 def require_assessment():
-    """Return the stored assessment or show an empty state linking back to Assess."""
+    """Return the stored assessment, or show an empty state that can start one from a synthetic example."""
     if "assessment" not in st.session_state:
         st.info("No assessment yet. Run one on the Assess page first; this page then explains it.",
                 icon=":material/info:")
         if "assess" in PAGES:
             st.page_link(PAGES["assess"], label="Go to Assess", icon=":material/arrow_back:")
+        st.markdown("Or start here with a **synthetic example** (demonstration input, not a real patient):")
+        cols = st.columns(len(DEMO_INPUTS))
+        for col, (label, patient) in zip(cols, DEMO_INPUTS.items()):
+            col.button(label.replace("Example Patient", "Example"), key=f"start_{label}", on_click=load_example,
+                       args=(label,), icon=":material/person:", width="stretch")
+            col.caption(profile(patient, short=True))
         st.stop()
     return st.session_state["assessment"]
 

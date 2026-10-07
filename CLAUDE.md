@@ -20,7 +20,7 @@ It estimates the probability of the dataset label `cardio` from 11 self-reportab
 ```bash
 ./scripts/setup.sh                 # fresh clone -> venv, deps, dataset, missing models (~10 min first time)
 ./scripts/setup.sh --regenerate    # retrain + rebuild all artifacts
-.venv/bin/python -m pytest -q      # full suite (156 tests, ~35 s once models exist)
+.venv/bin/python -m pytest -q      # full suite (161 tests, ~35 s once models exist)
 .venv/bin/streamlit run app.py     # the app
 ```
 

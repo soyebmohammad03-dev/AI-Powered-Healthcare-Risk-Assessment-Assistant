@@ -227,3 +227,51 @@ def test_disclaimer_on_every_page(page):
     if page != "assess":
         visit(at, page)
     assert DISCLAIMER in page_text(at)
+
+
+def test_landing_evidence_is_read_from_artifacts():
+    at = start()
+    text = page_text(at)
+    m, a = load_json_artifact("metrics.json"), load_json_artifact("analysis.json")
+    auc = a["bootstrap"]["models"][m["selection"]["model"]]["roc_auc"]
+    k = m["cv"]["n_splits"] * m["cv"]["n_repeats"]
+    assert f"{m['dataset']['clean_records']:,}" in text and f"{k} CV splits" in text
+    assert f"{auc['estimate']:.3f}" in text and f"{auc['lower']:.3f}–{auc['upper']:.3f}" in text
+    assert "not clinical performance" in text
+    assert "How it works" in text  # the empty result panel explains the Assess → Explain → Explore flow
+    for patient in DEMO_INPUTS.values():  # each synthetic example says what it represents
+        assert f"{patient.age:g} years" in text and f"BP {patient.ap_hi:g}/{patient.ap_lo:g}" in text
+
+
+@pytest.mark.parametrize("page", ["explain", "explore"])
+def test_empty_state_starts_a_synthetic_example(page):
+    at = visit(start(), page)
+    at.button(key="start_Example Patient C").click().run()
+    assert not at.exception
+    expected = f"{predict(DEMO_INPUTS['Example Patient C']).probability_positive:.1%}"
+    text = page_text(at)
+    assert "No assessment yet" not in text and expected in text
+    assert "Synthetic Example C · not a real patient" in text
+    visit(at, "assess")
+    assert expected in page_text(at)
+    assert at.number_input(key="age").value == DEMO_INPUTS["Example Patient C"].age  # form matches the assessment
+
+
+def test_context_bar_distinguishes_synthetic_from_own_inputs():
+    at = visit(assessed(), "explain")
+    assert "Assessment in view" in page_text(at) and "Synthetic Example B · not a real patient" in page_text(at)
+    assert "Next step" in page_text(at)
+    visit(at, "assess")
+    at.number_input(key="age").set_value(DEMO_INPUTS["Example Patient B"].age + 1)
+    submit(at)
+    assert "Synthetic Example B" not in page_text(at)
+    visit(at, "explore")
+    text = page_text(at)
+    assert "Assessment in view" in text and "Your inputs" in text and "Synthetic Example" not in text
+
+
+def test_band_bar_has_a_text_alternative():
+    at = assessed()
+    p = predict(DEMO_INPUTS["Example Patient B"]).probability_positive
+    from ui.core import band_name
+    assert f'aria-label="Estimate {p:.1%}, in the {band_name(p)} band.' in page_text(at)

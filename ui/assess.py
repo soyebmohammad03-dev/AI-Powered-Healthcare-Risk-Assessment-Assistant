@@ -5,11 +5,11 @@ from html import escape
 import streamlit as st
 
 from src.explainability import NEGATIVE, POSITIVE
-from src.prediction import DEMO_INPUTS, InvalidInputError, PatientInput, predict
+from src.prediction import DEMO_INPUTS, InvalidInputError, PatientInput
 from src.preprocessing import CATEGORY_LABELS, FEATURE_LABELS, FEATURES, PLAUSIBLE
-from src.recommendations import CLASS_THRESHOLD, DISCLAIMER, Category, Priority, generate, nearby_cutoffs
-from ui.core import (MODEL_NAMES, PAGES, band_bar, band_color, band_name, conformity, engine, factor_rows, footer,
-                     note, page_header, readable, section, tokens)
+from src.recommendations import CLASS_THRESHOLD, DISCLAIMER, Category, Priority, nearby_cutoffs
+from ui.core import (MODEL_NAMES, PAGES, assess, band_bar, band_color, band_name, conformity, engine, evidence_strip,
+                     example_label, factor_rows, footer, note, page_header, profile, readable, section, tokens)
 
 PRIORITY_COLORS = {Priority.HIGH: "red", Priority.MODERATE: "orange", Priority.LOW: "green", Priority.INFO: "gray"}
 
@@ -53,7 +53,8 @@ def input_form() -> bool:
         for col, (label, patient) in zip(cols, DEMO_INPUTS.items()):
             col.button(label.replace("Example Patient", "Example"), key=f"demo_{label}", on_click=fill_form,
                        args=(asdict(patient),), width="stretch", icon=":material/person:",
-                       help="Synthetic demonstration input, not a real patient.")
+                       help=f"Synthetic demonstration input, not a real patient: {profile(patient)}.")
+            col.caption(profile(patient, short=True))
         cols[-1].button("Clear", key="clear", on_click=fill_form, args=(None,), width="stretch",
                         icon=":material/restart_alt:")
 
@@ -61,7 +62,7 @@ def input_form() -> bool:
             left, right = st.columns(2, gap="large")
             with left:
                 section("Demographics")
-                a, b = st.columns([1, 1.25])
+                a, b = st.columns([1, 1.7])
                 with a:
                     number("age", "Age (years)", step=1,
                            help="The training data covers ages 29–65, so only this range is accepted.")
@@ -108,9 +109,7 @@ def run_assessment(bundle, explainer):
                  icon=":material/warning:")
         return
     with st.spinner("Computing the model estimate and its explanation…"):
-        result = predict(patient, bundle)
-        explanation = explainer.explain(patient)
-    st.session_state["assessment"] = (patient, result, explanation, generate(patient, result, explanation))
+        assess(patient, bundle, explainer)
 
 
 def conformity_html(patient) -> tuple[str, str]:
@@ -147,6 +146,9 @@ def result_panel(bundle, patient, result, explanation):
     color = band_color(band)
     calibration = bundle.get("calibration", "none").capitalize()
     conformity_value, caution = conformity_html(patient)
+    example = example_label(patient)
+    source = (f"<span class='chip'>Synthetic {escape(example)}</span><span class='subtle' style='font-size:.78rem'>"
+              "not a real patient</span>" if example else "")
     st.html(f"""
 <div class='hero-label'>Model-estimated probability</div>
 <div style='display:flex;align-items:flex-end;gap:1rem;flex-wrap:wrap'>
@@ -158,6 +160,7 @@ def result_panel(bundle, patient, result, explanation):
 </div>
 <div class='subtle' style='font-size:.9rem'>Model-estimated probability of the dataset's cardiovascular-disease
 label for these inputs. Not a diagnosis, and not a clinically validated individual risk.</div>
+{f"<div style='margin-top:.45rem'>{source}</div>" if source else ""}
 {band_bar(result.probability_positive)}
 {near_cutoff_html(result.probability_positive)}
 {caution}
@@ -245,6 +248,7 @@ st.html("<div class='tagline'>AI that predicts — and explains why.</div>"
         "<span class='chip'>Educational research prototype</span><span class='chip'>Not a diagnostic tool</span>"
         "<span class='chip'>Explainable by design</span>")
 note(f"<b>Not a medical device.</b> {DISCLAIMER}")
+evidence_strip()
 bundle, explainer = engine()
 
 left, right = st.columns([2, 1], gap="large")
@@ -259,9 +263,13 @@ with right:
         else:
             st.html("<div class='hero-label'>Model-estimated probability</div>"
                     "<div class='hero-number subtle' style='opacity:.35'>—</div>")
-            st.markdown("Enter the 11 inputs, or load a synthetic example, then select **Run Assessment**.\n\n"
-                        "You will see the model-estimated probability, a prototype estimate band, the inputs that "
-                        "moved the estimate most, and general guidance.")
+            st.html("<div class='section-label' style='margin-top:.6rem'>How it works</div><ol class='flow'>"
+                    "<li><b>Assess.</b> Enter the 11 inputs, or load a synthetic example, then select "
+                    "<b>Run Assessment</b>. The model estimate and the inputs that moved it most appear here.</li>"
+                    "<li><b>Explain.</b> See how the model weighted every input (SHAP), with separate "
+                    "reliability signals for this estimate.</li>"
+                    "<li><b>Explore.</b> Change inputs to see how the model estimate responds (what-if).</li>"
+                    "</ol>")
 
 if "assessment" in st.session_state:
     patient, result, explanation, guidance = st.session_state["assessment"]
