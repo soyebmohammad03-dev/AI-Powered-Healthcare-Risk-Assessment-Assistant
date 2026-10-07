@@ -197,6 +197,8 @@ All of these analyses run offline (`python -m src.reliability` and `python -m sr
 - **No threshold is tuned:** no artifact contains a selected threshold.
 
 ## 14. Prediction service and UI
+The component diagram and module map are in [architecture.md](architecture.md).
+
 - **Prediction service:** `src/prediction.py` loads `models/final_model.joblib`, checks the feature contract, validates input and calls the selected pipeline. `src/recommendations.py` adds rule-based informational guidance.
 - **Precomputation:** heavy analyses are precomputed into `artifacts/*.json`. The Streamlit UI caches the models, explainer and novelty detector, and never recomputes global analyses per request.
 

@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="400" viewBox="0 0 1280 400" role="img" aria-labelledby="t d">
+  <title id="t">AI-Powered Healthcare Risk Assessment Assistant</title>
+  <desc id="d">Project banner: the project name, the tagline "AI that predicts — and explains why.", and an abstract illustration of an estimate band and explanation bars. Illustrative only; it shows no real result.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0B1220"/>
+      <stop offset="0.6" stop-color="#0E1C26"/>
+      <stop offset="1" stop-color="#0F2E30"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.78" cy="0.45" r="0.5">
+      <stop offset="0" stop-color="#2DB4A6" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#2DB4A6" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="dots" width="24" height="24" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="1" fill="#E5E7EB" fill-opacity="0.06"/>
+    </pattern>
+    <linearGradient id="trace" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#2DB4A6" stop-opacity="0"/>
+      <stop offset="0.25" stop-color="#2DB4A6" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#2DB4A6" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1280" height="400" fill="url(#bg)"/>
+  <rect width="1280" height="400" fill="url(#dots)"/>
+  <rect width="1280" height="400" fill="url(#glow)"/>
+
+  <!-- signal trace -->
+  <path d="M0 338 H180 l14 -22 l12 44 l14 -64 l12 56 l10 -14 H420 l12 -18 l10 34 l12 -44 l10 28 H700" fill="none"
+        stroke="url(#trace)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+
+  <g font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+    <text x="64" y="92" fill="#5ECFC2" font-size="14" font-weight="600" letter-spacing="2.4">EXPLAINABLE AI · HUMAN-CENTRED DECISION SUPPORT</text>
+    <text x="64" y="156" fill="#F3F4F6" font-size="50" font-weight="700" letter-spacing="-1">AI-Powered Healthcare</text>
+    <text x="64" y="214" fill="#F3F4F6" font-size="50" font-weight="700" letter-spacing="-1">Risk Assessment Assistant</text>
+    <text x="64" y="262" fill="#5ECFC2" font-size="24" font-weight="600">AI that predicts — and explains why.</text>
+    <g font-size="13" font-weight="600" fill="#A3ACB9">
+      <rect x="64" y="284" width="196" height="28" rx="14" fill="none" stroke="#334155"/>
+      <text x="162" y="303" text-anchor="middle">Educational prototype</text>
+      <rect x="270" y="284" width="178" height="28" rx="14" fill="none" stroke="#334155"/>
+      <text x="359" y="303" text-anchor="middle">Not a medical device</text>
+      <rect x="458" y="284" width="196" height="28" rx="14" fill="none" stroke="#334155"/>
+      <text x="556" y="303" text-anchor="middle">Explainable by design</text>
+    </g>
+
+    <!-- illustrative card: estimate band + explanation bars (no values) -->
+    <g transform="translate(792 62)">
+      <rect width="424" height="276" rx="14" fill="#121821" fill-opacity="0.92" stroke="#263241"/>
+      <text x="28" y="40" fill="#7C8594" font-size="11" font-weight="600" letter-spacing="1.6">MODEL ESTIMATE</text>
+      <rect x="28" y="58" width="110" height="10" rx="5" fill="#123B38"/>
+      <rect x="138" y="58" width="110" height="10" fill="#3D2F12"/>
+      <rect x="248" y="58" width="148" height="10" rx="5" fill="#3F1D1D"/>
+      <rect x="138" y="58" width="4" height="10" fill="#3D2F12"/>
+      <rect x="244" y="58" width="6" height="10" fill="#3F1D1D"/>
+      <rect x="226" y="51" width="4" height="24" rx="2" fill="#E5E7EB"/>
+      <g fill="#7C8594" font-size="11">
+        <text x="28" y="92">Lower</text><text x="138" y="92">Moderate</text><text x="248" y="92">Higher</text>
+      </g>
+
+      <text x="28" y="132" fill="#7C8594" font-size="11" font-weight="600" letter-spacing="1.6">WHY · SHAP CONTRIBUTIONS</text>
+      <line x1="244" y1="146" x2="244" y2="252" stroke="#334155"/>
+      <g font-size="12" fill="#CBD5E1" text-anchor="end">
+        <text x="176" y="161">Systolic BP</text>
+        <text x="176" y="187">Age</text>
+        <text x="176" y="213">Cholesterol</text>
+        <text x="176" y="239">Physical activity</text>
+      </g>
+      <rect x="244" y="150" width="152" height="14" rx="3" fill="#FB923C"/>
+      <rect x="244" y="176" width="88" height="14" rx="3" fill="#FB923C" fill-opacity="0.85"/>
+      <rect x="244" y="202" width="52" height="14" rx="3" fill="#FB923C" fill-opacity="0.7"/>
+      <rect x="194" y="228" width="50" height="14" rx="3" fill="#2DD4BF" fill-opacity="0.85"/>
+      <text x="28" y="262" fill="#7C8594" font-size="11">Illustrative · model behaviour, not medical causation</text>
+    </g>
+  </g>
+</svg>

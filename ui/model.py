@@ -17,6 +17,9 @@ METRIC_LABELS = {"accuracy": "Accuracy", "precision": "Precision", "recall": "Re
                  "roc_auc": "ROC-AUC", "pr_auc": "PR-AUC", "log_loss": "Log loss", "brier": "Brier"}
 NUM = {m: st.column_config.NumberColumn(format="%.3f") for m in METRIC_LABELS.values()}
 VARIANT_DASH = {"raw": "dot", "sigmoid": "dash", "isotonic": "solid"}
+# Subplot titles sit just above the plots, so the legend goes above them instead of on top of them.
+TITLED_SUBPLOTS = dict(legend=dict(orientation="h", yanchor="bottom", y=1.13, x=0, title=None),
+                       margin=dict(l=8, r=8, t=70, b=8))
 
 
 def short(label: str) -> str:
@@ -82,7 +85,7 @@ with tabs[0]:
                                  marker_color=MODEL_COLORS[m], boxpoints="all", jitter=0.4, pointpos=0,
                                  showlegend=col == 1, legendgroup=m), row=1, col=col)
     fig.update_xaxes(showticklabels=False)
-    chart(fig, height=330, yaxis_title="Score on one validation split")
+    chart(fig, height=370, yaxis_title="Score on one validation split", **TITLED_SUBPLOTS)
     st.caption(f"Each point is one of the {k} validation splits (same splits for every model). Narrow boxes mean "
                "the result depends little on which rows happened to be held out.")
 
@@ -572,7 +575,7 @@ with tabs[7]:
         fig.update_xaxes(title_text=f"Mean {mix[0]['label'].lower()} of the resampled set (dotted: unshifted)", row=1, col=c)
     fig.update_yaxes(title_text="ROC-AUC", row=1, col=1)
     fig.update_yaxes(title_text="Predicted − observed", tickformat="+.1%", row=1, col=2)
-    chart(fig, height=340)
+    chart(fig, height=380, **TITLED_SUBPLOTS)
     st.dataframe(pd.DataFrame([{"Measurement offset": s["label"], "Dropped (invalid)": s["dropped_invalid"],
                                 **{f"{MODEL_NAMES[m]} ROC-AUC": s["metrics"][m]["roc_auc"] for m in models},
                                 f"{MODEL_NAMES[FINAL]} predicted": s["metrics"][FINAL]["mean_predicted"],

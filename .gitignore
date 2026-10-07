@@ -10,3 +10,6 @@ data/cardio_train.csv
 artifacts/oof_predictions.npz
 .env
 .streamlit/secrets.toml
+# Agent-skill links that Streamlit creates when the app runs (they point into .venv)
+.agents/
+.claude/skills/

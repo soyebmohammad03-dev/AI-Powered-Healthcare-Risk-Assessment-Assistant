@@ -1,0 +1,132 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="830" viewBox="0 0 1200 830" role="img" aria-labelledby="t d">
+<title id="t">Architecture of the AI-Powered Healthcare Risk Assessment Assistant</title>
+<desc id="d">Left: the per-assessment runtime flow from the user through the Streamlit UI, input validation, preprocessing, the XGBoost model, the probability estimate, the SHAP explanation and the reliability and analysis layers to a human-readable result. Right: the offline research pipeline from the dataset through cleaning, split, model comparison, selection, evaluation and explainability, and reliability to the saved models and committed artifacts that the app loads.</desc>
+<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#64748B"/></marker></defs>
+<rect width="1200" height="830" rx="16" fill="#FFFFFF" stroke="#E2E6EB"/>
+<g font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+<text x="40" y="44" font-size="12" font-weight="700" letter-spacing="1.6" fill="#0F6E6E">PER-ASSESSMENT FLOW (RUNTIME)</text>
+<text x="40" y="62" font-size="12" fill="#5B6472">What happens when a user runs an assessment in the app</text>
+<rect x="40" y="80" width="520" height="56" rx="9" fill="#F2F8F7" stroke="#D5DBE3"/>
+<rect x="40" y="80" width="5" height="56" rx="2.5" fill="#0F6E6E"/>
+<text x="60" y="102" font-size="14.5" font-weight="650" fill="#111827">User</text>
+<text x="60" y="121" font-size="12" fill="#5B6472">enters the 11 inputs, or loads a synthetic example</text>
+<rect x="40" y="156" width="520" height="56" rx="9" fill="#F2F8F7" stroke="#D5DBE3"/>
+<rect x="40" y="156" width="5" height="56" rx="2.5" fill="#0F6E6E"/>
+<text x="60" y="178" font-size="14.5" font-weight="650" fill="#111827">Streamlit UI</text>
+<text x="546" y="178" font-size="11" text-anchor="end" fill="#0F6E6E" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">ui/</text>
+<text x="60" y="197" font-size="12" fill="#5B6472">app.py navigation · Assess, Explain, Explore, Model, Methodology</text>
+<rect x="40" y="232" width="520" height="56" rx="9" fill="#F2F8F7" stroke="#D5DBE3"/>
+<rect x="40" y="232" width="5" height="56" rx="2.5" fill="#0F6E6E"/>
+<text x="60" y="254" font-size="14.5" font-weight="650" fill="#111827">Input validation</text>
+<text x="546" y="254" font-size="11" text-anchor="end" fill="#0F6E6E" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">src/prediction.py</text>
+<text x="60" y="273" font-size="12" fill="#5B6472">required fields, plausible ranges, systolic &gt; diastolic, BMI check</text>
+<rect x="40" y="308" width="520" height="56" rx="9" fill="#F2F8F7" stroke="#D5DBE3"/>
+<rect x="40" y="308" width="5" height="56" rx="2.5" fill="#0F6E6E"/>
+<text x="60" y="330" font-size="14.5" font-weight="650" fill="#111827">Preprocessing</text>
+<text x="546" y="330" font-size="11" text-anchor="end" fill="#0F6E6E" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">src/preprocessing.py</text>
+<text x="60" y="349" font-size="12" fill="#5B6472">BMI from height and weight · scaling and one-hot in the saved pipeline</text>
+<rect x="40" y="384" width="520" height="56" rx="9" fill="#F2F8F7" stroke="#D5DBE3"/>
+<rect x="40" y="384" width="5" height="56" rx="2.5" fill="#0F6E6E"/>
+<text x="60" y="406" font-size="14.5" font-weight="650" fill="#111827">XGBoost model</text>
+<text x="546" y="406" font-size="11" text-anchor="end" fill="#0F6E6E" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">models/final_model.joblib</text>
+<text x="60" y="425" font-size="12" fill="#5B6472">final selected model, raw probabilities (no calibrator)</text>
+<rect x="40" y="460" width="520" height="56" rx="9" fill="#F2F8F7" stroke="#D5DBE3"/>
+<rect x="40" y="460" width="5" height="56" rx="2.5" fill="#0F6E6E"/>
+<text x="60" y="482" font-size="14.5" font-weight="650" fill="#111827">Probability estimate</text>
+<text x="546" y="482" font-size="11" text-anchor="end" fill="#0F6E6E" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">src/prediction.py</text>
+<text x="60" y="501" font-size="12" fill="#5B6472">model-estimated probability · display band · class at 0.50</text>
+<rect x="40" y="536" width="520" height="56" rx="9" fill="#F2F8F7" stroke="#D5DBE3"/>
+<rect x="40" y="536" width="5" height="56" rx="2.5" fill="#0F6E6E"/>
+<text x="60" y="558" font-size="14.5" font-weight="650" fill="#111827">SHAP explanation</text>
+<text x="546" y="558" font-size="11" text-anchor="end" fill="#0F6E6E" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">src/explainability.py</text>
+<text x="60" y="577" font-size="12" fill="#5B6472">exact TreeSHAP on the model score, mapped to the probability</text>
+<rect x="40.0" y="612" width="165.33333333333334" height="112" rx="9" fill="#F2F8F7" stroke="#D5DBE3"/>
+<rect x="40.0" y="612" width="5" height="112" rx="2.5" fill="#0F6E6E"/>
+<text x="56.0" y="634" font-size="14" font-weight="650" fill="#111827">Reliability signals</text>
+<text x="56.0" y="654" font-size="11.5" fill="#5B6472">input conformity</text>
+<text x="56.0" y="669" font-size="11.5" fill="#5B6472">explanation stability</text>
+<text x="56.0" y="684" font-size="11.5" fill="#5B6472">model disagreement</text>
+<text x="56.0" y="699" font-size="11.5" fill="#5B6472">calibration status</text>
+<text x="56.0" y="714" font-size="10.5" fill="#0F6E6E" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">src/reliability.py</text>
+<rect x="217.33333333333334" y="612" width="165.33333333333334" height="112" rx="9" fill="#F2F8F7" stroke="#D5DBE3"/>
+<rect x="217.33333333333334" y="612" width="5" height="112" rx="2.5" fill="#0F6E6E"/>
+<text x="233.33333333333334" y="634" font-size="14" font-weight="650" fill="#111827">What-if</text>
+<text x="233.33333333333334" y="654" font-size="11.5" fill="#5B6472">guarded scenarios and</text>
+<text x="233.33333333333334" y="669" font-size="11.5" fill="#5B6472">response curves</text>
+<text x="233.33333333333334" y="714" font-size="10.5" fill="#0F6E6E" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">src/what_if.py</text>
+<rect x="394.6666666666667" y="612" width="165.33333333333334" height="112" rx="9" fill="#F2F8F7" stroke="#D5DBE3"/>
+<rect x="394.6666666666667" y="612" width="5" height="112" rx="2.5" fill="#0F6E6E"/>
+<text x="410.6666666666667" y="634" font-size="14" font-weight="650" fill="#111827">Guidance</text>
+<text x="410.6666666666667" y="654" font-size="11.5" fill="#5B6472">fixed, transparent rules;</text>
+<text x="410.6666666666667" y="669" font-size="11.5" fill="#5B6472">no LLM, no diagnosis</text>
+<text x="410.6666666666667" y="714" font-size="10.5" fill="#0F6E6E" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">src/recommendations.py</text>
+<rect x="40" y="744" width="520" height="56" rx="9" fill="#E6F2F0" stroke="#D5DBE3"/>
+<rect x="40" y="744" width="5" height="56" rx="2.5" fill="#0F6E6E"/>
+<text x="60" y="766" font-size="14.5" font-weight="650" fill="#111827">Human-readable result</text>
+<text x="60" y="785" font-size="12" fill="#5B6472">estimate, explanation, separate reliability signals, guidance · never a diagnosis</text>
+<path d="M300.0 136 L300.0 154" stroke="#64748B" stroke-width="1.5" fill="none" marker-end="url(#a)"/>
+<path d="M300.0 212 L300.0 230" stroke="#64748B" stroke-width="1.5" fill="none" marker-end="url(#a)"/>
+<path d="M300.0 288 L300.0 306" stroke="#64748B" stroke-width="1.5" fill="none" marker-end="url(#a)"/>
+<path d="M300.0 364 L300.0 382" stroke="#64748B" stroke-width="1.5" fill="none" marker-end="url(#a)"/>
+<path d="M300.0 440 L300.0 458" stroke="#64748B" stroke-width="1.5" fill="none" marker-end="url(#a)"/>
+<path d="M300.0 516 L300.0 534" stroke="#64748B" stroke-width="1.5" fill="none" marker-end="url(#a)"/>
+<path d="M300.0 592 L300.0 610" stroke="#64748B" stroke-width="1.5" fill="none" marker-end="url(#a)"/>
+<path d="M300.0 724 L300.0 742" stroke="#64748B" stroke-width="1.5" fill="none" marker-end="url(#a)"/>
+<text x="640" y="44" font-size="12" font-weight="700" letter-spacing="1.6" fill="#0F6E6E">RESEARCH PIPELINE (OFFLINE)</text>
+<text x="640" y="62" font-size="12" fill="#5B6472">python -m src.train_models → src.analysis → src.reliability → src.shift_analysis</text>
+<rect x="640" y="80" width="520" height="56" rx="9" fill="#F5F5FE" stroke="#D5DBE3"/>
+<rect x="640" y="80" width="5" height="56" rx="2.5" fill="#6366F1"/>
+<text x="660" y="102" font-size="14.5" font-weight="650" fill="#111827">Dataset</text>
+<text x="1146" y="102" font-size="11" text-anchor="end" fill="#6366F1" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">src/data_loader.py</text>
+<text x="660" y="121" font-size="12" fill="#5B6472">Kaggle cardiovascular dataset, 70,000 rows, SHA-256 pinned</text>
+<rect x="640" y="152" width="520" height="56" rx="9" fill="#F5F5FE" stroke="#D5DBE3"/>
+<rect x="640" y="152" width="5" height="56" rx="2.5" fill="#6366F1"/>
+<text x="660" y="174" font-size="14.5" font-weight="650" fill="#111827">Cleaning</text>
+<text x="1146" y="174" font-size="11" text-anchor="end" fill="#6366F1" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">src/data_loader.py</text>
+<text x="660" y="193" font-size="12" fill="#5B6472">documented exclusion rules → 68,573 rows</text>
+<rect x="640" y="224" width="520" height="56" rx="9" fill="#F5F5FE" stroke="#D5DBE3"/>
+<rect x="640" y="224" width="5" height="56" rx="2.5" fill="#6366F1"/>
+<text x="660" y="246" font-size="14.5" font-weight="650" fill="#111827">Split</text>
+<text x="1146" y="246" font-size="11" text-anchor="end" fill="#6366F1" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">src/data_loader.py</text>
+<text x="660" y="265" font-size="12" fill="#5B6472">stratified 80/20, seed 42 · test set held out until after selection</text>
+<rect x="640" y="296" width="520" height="56" rx="9" fill="#F5F5FE" stroke="#D5DBE3"/>
+<rect x="640" y="296" width="5" height="56" rx="2.5" fill="#6366F1"/>
+<text x="660" y="318" font-size="14.5" font-weight="650" fill="#111827">Model comparison</text>
+<text x="1146" y="318" font-size="11" text-anchor="end" fill="#6366F1" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">src/train_models.py</text>
+<text x="660" y="337" font-size="12" fill="#5B6472">LR, RF, XGBoost × raw / sigmoid / isotonic · 5×5 repeated CV</text>
+<rect x="640" y="368" width="520" height="56" rx="9" fill="#F5F5FE" stroke="#D5DBE3"/>
+<rect x="640" y="368" width="5" height="56" rx="2.5" fill="#6366F1"/>
+<text x="660" y="390" font-size="14.5" font-weight="650" fill="#111827">Selection</text>
+<text x="1146" y="390" font-size="11" text-anchor="end" fill="#6366F1" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">src/train_models.py</text>
+<text x="660" y="409" font-size="12" fill="#5B6472">corrected resampled t-tests, α = 0.05 · exact-SHAP eligibility</text>
+<rect x="640" y="440" width="520" height="72" rx="9" fill="#F5F5FE" stroke="#D5DBE3"/>
+<rect x="640" y="440" width="5" height="72" rx="2.5" fill="#6366F1"/>
+<text x="660" y="462" font-size="14.5" font-weight="650" fill="#111827">Evaluation and explainability</text>
+<text x="1146" y="462" font-size="11" text-anchor="end" fill="#6366F1" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">src/analysis.py</text>
+<text x="660" y="481" font-size="12" fill="#5B6472">held-out test once · bootstrap CIs, calibration, thresholds,</text>
+<text x="660" y="497" font-size="12" fill="#5B6472">subgroups · global SHAP, permutation importance, PDP/ICE</text>
+<rect x="640" y="528" width="520" height="72" rx="9" fill="#F5F5FE" stroke="#D5DBE3"/>
+<rect x="640" y="528" width="5" height="72" rx="2.5" fill="#6366F1"/>
+<text x="660" y="550" font-size="14.5" font-weight="650" fill="#111827">Reliability</text>
+<text x="1146" y="550" font-size="11" text-anchor="end" fill="#6366F1" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">src/reliability.py · src/shift_analysis.py</text>
+<text x="660" y="569" font-size="12" fill="#5B6472">novelty detector, perturbation and explanation stability,</text>
+<text x="660" y="585" font-size="12" fill="#5B6472">monotonicity, disagreement · synthetic shift experiment</text>
+<rect x="640" y="616" width="520" height="72" rx="9" fill="#ECECFD" stroke="#D5DBE3"/>
+<rect x="640" y="616" width="5" height="72" rx="2.5" fill="#6366F1"/>
+<text x="660" y="638" font-size="14.5" font-weight="650" fill="#111827">Saved outputs</text>
+<text x="660" y="657" font-size="12" fill="#5B6472">models/*.joblib: final model, candidates, novelty detector (rebuilt)</text>
+<text x="660" y="673" font-size="12" fill="#5B6472">artifacts/*.json: metrics and analyses with provenance (committed)</text>
+<path d="M900.0 136 L900.0 150" stroke="#64748B" stroke-width="1.5" fill="none" marker-end="url(#a)"/>
+<path d="M900.0 208 L900.0 222" stroke="#64748B" stroke-width="1.5" fill="none" marker-end="url(#a)"/>
+<path d="M900.0 280 L900.0 294" stroke="#64748B" stroke-width="1.5" fill="none" marker-end="url(#a)"/>
+<path d="M900.0 352 L900.0 366" stroke="#64748B" stroke-width="1.5" fill="none" marker-end="url(#a)"/>
+<path d="M900.0 424 L900.0 438" stroke="#64748B" stroke-width="1.5" fill="none" marker-end="url(#a)"/>
+<path d="M900.0 512 L900.0 526" stroke="#64748B" stroke-width="1.5" fill="none" marker-end="url(#a)"/>
+<path d="M900.0 600 L900.0 614" stroke="#64748B" stroke-width="1.5" fill="none" marker-end="url(#a)"/>
+<path d="M640 652 H600 V412.0 H564" stroke="#64748B" stroke-width="1.5" fill="none" stroke-dasharray="5 4" marker-end="url(#a)"/>
+<path d="M600 412.0 V184.0 H564" stroke="#64748B" stroke-width="1.5" fill="none" stroke-dasharray="5 4" marker-end="url(#a)"/>
+<path d="M600 652 V668 H564" stroke="#64748B" stroke-width="1.5" fill="none" stroke-dasharray="5 4" marker-end="url(#a)"/>
+<text x="640" y="712" font-size="11.5" fill="#5B6472">Dashed arrows: what the app loads. The final model; the candidate models and novelty</text>
+<text x="640" y="728" font-size="11.5" fill="#5B6472">detector for the reliability signals; the committed artifacts for the Model and Methodology</text>
+<text x="640" y="744" font-size="11.5" fill="#5B6472">pages. The app never retrains: ./scripts/setup.sh rebuilds every output from the pinned dataset.</text>
+</g></svg>

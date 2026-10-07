@@ -82,8 +82,10 @@ with results:
                 text=[f"{v:+.1f} pp" if v is not None else "not valid alone" for _, v in items],
                 textposition="outside", cliponaxis=False,
                 hovertemplate="%{y}: %{text}<extra></extra>"))
+            lo, hi = min(0, *(v or 0 for _, v in items)), max(0, *(v or 0 for _, v in items))
+            pad = 0.35 * max(hi - lo, 0.5)  # room for the outside labels, so they never cover the input names
             chart(fig, height=60 + 40 * len(items), showlegend=False, xaxis_title="change in percentage points",
-                  margin=dict(l=8, r=60, t=10, b=40))
+                  xaxis_range=[lo - pad, hi + pad], margin=dict(l=8, r=60, t=10, b=40))
             st.caption("Single-change effects need not add up to the combined change: effects combine on the "
                        "model's internal score, and the probability is not linear in it.")
     else:

@@ -275,3 +275,17 @@ def test_band_bar_has_a_text_alternative():
     p = predict(DEMO_INPUTS["Example Patient B"]).probability_positive
     from ui.core import band_name
     assert f'aria-label="Estimate {p:.1%}, in the {band_name(p)} band.' in page_text(at)
+
+
+def test_chart_labels_have_room():
+    """Outside bar labels and legends must not be drawn over axis labels or subplot titles."""
+    import json
+    at = visit(assessed("Example Patient C"), "explore")
+    at.slider(key="wi_ap_hi").set_value(130.0).run()
+    at.slider(key="wi_weight").set_value(70.0).run()
+    spec = next(json.loads(c.proto.spec) for c in at.get("plotly_chart") if "change in percentage points" in c.proto.spec)
+    xs, (lo, hi) = spec["data"][0]["x"], spec["layout"]["xaxis"]["range"]
+    assert lo < min(0, *xs) - 0.1 and hi > max(0, *xs) + 0.1
+    visit(at, "model")
+    spec = next(json.loads(c.proto.spec) for c in at.get("plotly_chart") if "Score on one validation split" in c.proto.spec)
+    assert spec["layout"]["legend"]["y"] > 1.1 and spec["layout"]["margin"]["t"] >= 60

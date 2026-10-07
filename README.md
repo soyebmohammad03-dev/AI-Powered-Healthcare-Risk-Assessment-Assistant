@@ -1,233 +1,251 @@
+<p align="center">
+  <img src="docs/assets/banner.svg" alt="AI-Powered Healthcare Risk Assessment Assistant — AI that predicts, and explains why" width="100%">
+</p>
+
 # AI-Powered Healthcare Risk Assessment Assistant
 
-**An Explainable AI-Based Human-Centered Healthcare Decision Support System.** This is an educational research prototype for the B.Tech course *Design of Artificial Intelligence Products*.
+[![Tests](https://github.com/soyebmohammad03-dev/AI-Powered-Healthcare-Risk-Assessment-Assistant/actions/workflows/tests.yml/badge.svg)](https://github.com/soyebmohammad03-dev/AI-Powered-Healthcare-Risk-Assessment-Assistant/actions/workflows/tests.yml)
+[![Release](https://img.shields.io/github/v/tag/soyebmohammad03-dev/AI-Powered-Healthcare-Risk-Assessment-Assistant?label=release&sort=semver)](https://github.com/soyebmohammad03-dev/AI-Powered-Healthcare-Risk-Assessment-Assistant/tags)
+[![Python 3.12](https://img.shields.io/badge/python-3.12-3776AB?logo=python&logoColor=white)](.python-version)
+[![Streamlit](https://img.shields.io/badge/Streamlit-1.64-FF4B4B?logo=streamlit&logoColor=white)](requirements.txt)
+[![scikit-learn](https://img.shields.io/badge/scikit--learn-1.9-F7931E?logo=scikitlearn&logoColor=white)](requirements.txt)
+[![XGBoost](https://img.shields.io/badge/XGBoost-3.4-1F6FB2)](requirements.txt)
+[![SHAP](https://img.shields.io/badge/SHAP-0.52-8A2BE2)](requirements.txt)
+[![License: MIT](https://img.shields.io/badge/license-MIT-2E7D32)](LICENSE)
 
-> **Medical disclaimer.** This prototype does **not** diagnose cardiovascular disease, prescribe treatment, or replace a healthcare professional, and it is not medical advice. Its outputs are model-based estimates from one public research dataset and are **not clinically validated**. Its probabilities agree with that dataset's labels; they are not clinical risks.
+**An Explainable AI-Based Human-Centered Healthcare Decision Support System.**
 
-The system estimates a probability, shows how trustworthy and how explainable that estimate is, and lets you inspect the model critically. Its components:
-- **An evidence-selected model.** A pre-declared protocol chooses among three candidate models on 25 repeated CV splits, and the result is accepted even when it is not the most interpretable model.
-- **Exact explanations.** Each assessment is broken down into per-input contributions using SHAP.
-- **What-if analysis.** You can change inputs and see how the model estimate responds.
-- **Model analytics.** Calibration, threshold, decision trade-off, subgroup and bootstrap-uncertainty analyses of the models.
-- **Reliability signals.** For each assessment: an input-conformity check, explanation stability, and disagreement between candidate models. Offline: prediction and explanation stability, monotonicity checks and synthetic distribution-shift experiments.
-- **Data Quality Lab and model card.** What was removed from the data and why, plus a formal statement of intended use and limitations.
+> ***AI that predicts — and explains why.***
 
-## Application
+An educational research prototype, built for the B.Tech course *Design of Artificial Intelligence Products*. From 11 everyday health inputs, it estimates the probability of a cardiovascular-disease label in a public dataset. It explains every estimate with exact SHAP, lets you test what-if scenarios, and reports separate reliability signals and the model's known weaknesses alongside the estimate.
 
-```bash
-streamlit run app.py
-```
+> [!IMPORTANT]
+> **Not a medical device.** This prototype does not diagnose, screen, triage or recommend treatment, and it is not clinically validated. Its probabilities agree with one public dataset's labels; they are not clinical risks. See the [disclaimer](#ethical--medical-disclaimer).
 
-The app has five areas in a top navigation bar. Each area is a page script in `ui/`; all model logic lives in `src/`.
+---
 
-| Area | What it is for |
+**Contents:** [Overview](#overview) · [Key features](#key-features) · [How it works](#how-it-works) · [Architecture](#architecture) · [Results](#results) · [Walkthrough](#application-walkthrough) · [Installation](#installation) · [Reproduce results](#reproduce-results) · [Limitations](#limitations) · [Docs](docs/README.md)
+
+## Overview
+
+The app answers four questions a person should be able to ask of any AI estimate:
+
+| Question | Where the app answers it |
 |---|---|
-| **Assess** | Product header, a prominent educational disclaimer and a strip of headline research facts read from the artifacts (cleaned records, candidate models and CV splits, held-out ROC-AUC with its bootstrap interval, exact SHAP), above a grouped input form (Demographics, Body measurements, Blood pressure, Laboratory indicators, Lifestyle) with three synthetic examples, each with a one-line profile. Before the first assessment the result panel explains the Assess → Explain → Explore flow. **Run Assessment** shows the model-estimated probability as the headline (with a note when it lies within 3 pp of a band boundary or the 0.50 threshold), a "What the model does not know" panel, the prototype estimate band, and secondary information (model, calibration status, input conformity, reference baseline, class at 0.50). It also shows a short "How the model arrived here" preview, general guidance and an input summary. Unusual inputs get a caution; they are never blocked. |
-| **Explain** | The full SHAP explanation of the current assessment. An *assessment in view* bar shows the estimate, the main inputs and whether they are a synthetic example, with links to edit the inputs or continue to Explore. It opens with a plain-language summary, then shows the reference baseline, this estimate and the difference between them; a diverging contribution chart with ▲/▼ markers, so direction does not rely on colour; and a note that model contribution ≠ medical causation. The **Assessment reliability** panel shows probability, input conformity, explanation stability, model disagreement and calibration status as separate signals, with no combined score. Without an assessment, Explain and Explore offer links back to Assess and one-click synthetic examples. |
-| **Explore** | What-if (model sensitivity) analysis. Change systolic or diastolic BP, weight, cholesterol, glucose, smoking, activity or alcohol, and compare baseline, scenario and change in percentage points, with the direction stated. A note, read from the robustness analysis, warns when the model is non-monotone in the plotted input. It also shows each change on its own and the model estimate across one input. Impossible combinations are rejected, and the stored assessment is never modified. |
-| **Model** | A scope note (dataset and protocol, not clinical performance), then tabs for Overview (repeated-CV comparison, stability box plots, selection protocol), Calibration (reliability diagram with bin counts, ECE, slope and intercept), ROC & PR, Thresholds (0.05–0.95, decision trade-off, net benefit), Explainability, Subgroups (with intervals), Uncertainty (bootstrap) and Robustness (novelty, stability, monotonicity, disagreement, synthetic shift). |
-| **Methodology** | Pipeline diagram, Data Quality Lab (exclusions with examples, ranges, distributions, correlations), model card, validation strategy, limitations, and a **Scope & human-centred design** tab mapping each user question (what it knows, predicts, does not know, where it is uncertain) to where the app answers it. |
+| What does the model estimate for these inputs? | **Assess**: the model-estimated probability, a prototype band, and the inputs that moved it most |
+| Why? | **Explain**: an exact SHAP breakdown of this estimate, in a chart and in plain language |
+| What would change it? | **Explore**: what-if scenarios and response curves, with warnings where the model behaves non-monotonically |
+| How far can I trust it? | **Explain**, **Model** and **Methodology**: separate reliability signals, calibration, subgroup gaps, robustness tests and limitations |
 
-Design notes:
-- Theming uses Streamlit's native light and dark themes (`.streamlit/config.toml`), the Inter font, and semantic colours: teal = moved the estimate lower or lower band, amber = moderate, red/orange = higher. Every coloured item also has a text label or ▲/▼ marker.
-- The model and explainer are cached once per server (`st.cache_resource`).
-- All global analyses are precomputed into `artifacts/*.json`. An assessment costs one prediction, one exact SHAP call, a novelty check, about 30 SHAP calls for local stability (cached) and three candidate predictions.
+The model was chosen by a protocol declared *before* the comparison was run, and the result was accepted even though it is not the most interpretable candidate. Its weaknesses are measured and shown in the app, not hidden.
+
+## Why this project?
+
+Tabular health models are often shown as a single number. That hides the questions that matter for responsible use: what drove the estimate, how stable it is, whether the input even resembles the training data, and where the model is known to be weaker. This project treats those questions as part of the product:
+
+- **Explainability as a requirement.** A model was eligible only if it had an exact, additive SHAP explanation.
+- **Evidence before claims.** Every number in the app and the docs is read from a generated artifact with provenance.
+- **Honest uncertainty.** Reliability signals are shown side by side and never merged into an invented "trust score".
+- **Human-centred wording.** "Model-estimated probability" rather than "your risk"; guidance from transparent rules, never a diagnosis.
+
+## Key features
+
+- **Evidence-selected model.** Logistic Regression, Random Forest and XGBoost, each raw, sigmoid- or isotonic-calibrated (9 variants), compared on 25 repeated-CV splits with pre-declared corrected t-tests.
+- **Exact explanations.** TreeSHAP per assessment, reconciled with the model's own output; global SHAP, permutation importance and PDP/ICE.
+- **What-if analysis.** Guarded scenarios that reject impossible inputs, single-change effects and response curves.
+- **Reliability signals.** For each assessment: input conformity (novelty detection), explanation stability under small perturbations, disagreement between candidate models, and calibration status.
+- **Model analytics.** Calibration, ROC/PR, thresholds and decision trade-off, subgroup performance, bootstrap uncertainty and robustness, all read from committed artifacts.
+- **Data Quality Lab and model card.** What was removed from the data and why, plus a formal statement of intended use and limitations.
+- **Synthetic demo inputs.** Three clearly labelled examples (not real patients) to try the app in one click.
+- **Reproducible.** One setup script, a checksum-pinned dataset, pinned dependencies, seed 42 throughout, 162 tests and CI.
+
+## How it works
+
+1. **Assess.** Enter 11 inputs (age, gender, height, weight, systolic and diastolic blood pressure, cholesterol, glucose, smoking, alcohol, physical activity) or load a synthetic example. Inputs are validated against plausible ranges before they reach the model.
+2. **Estimate.** The saved pipeline derives BMI, preprocesses the inputs and returns XGBoost's model-estimated probability. A prototype display band (Lower < 30%, Moderate 30–60%, Higher ≥ 60%) and the class at 0.50 are shown as separate concepts.
+3. **Explain.** Exact TreeSHAP shows how much each input pushed the estimate up or down from the reference baseline (the estimate for an average training record).
+4. **Check.** Reliability signals flag unusual inputs, unstable explanations and model disagreement; rule-based guidance adds general, non-diagnostic information.
+5. **Explore.** Change blood pressure, weight, laboratory values or lifestyle inputs and see how the model estimate responds.
+
+## Architecture
+
+<p align="center"><img src="docs/assets/architecture.svg" alt="Architecture: per-assessment runtime flow (left) and offline research pipeline (right)" width="100%"></p>
+
+The **offline research pipeline** (`src.train_models` → `src.analysis` → `src.reliability` → `src.shift_analysis`) writes the models and the committed analysis artifacts. The **Streamlit app** (`app.py`, `ui/`) only loads them: it never retrains. All model logic lives in `src/`; the UI holds none. Details, the module map and the saved-file contract are in [docs/architecture.md](docs/architecture.md).
+
+## Explainable AI
+
+- **Local:** exact TreeSHAP on XGBoost's log-odds score, re-anchored so that baseline + contributions equals the model score; it reconciles with the model output within 1e-5. Contributions are mapped to the displayed probability, keeping each one's direction.
+- **Global:** mean |SHAP|, permutation importance, partial dependence and ICE curves, and the strongest pairwise interactions. Systolic blood pressure carries 49% of the attribution, age 16% and cholesterol 13%.
+- **Model behaviour, not causation.** In this dataset, smokers and drinkers have slightly *lower* label rates (a confounded pattern), and the model reproduces it. The app says so wherever it could mislead.
+
+## Reliability & robustness
+
+<p align="center"><img src="docs/assets/screenshots/06-model-robustness.png" alt="Model → Robustness: input-conformity detectors and prediction stability under small input changes" width="88%"></p>
+
+| Signal | What it measured on this dataset |
+|---|---|
+| Input conformity | A Mahalanobis-distance detector, fitted and chosen on training rows only, flags about 1% of inputs as unusual. Unusual inputs get a caution, never a block. |
+| Prediction stability | A 1% change to one input can move XGBoost's estimate by up to 37 percentage points (pp); the 95th percentile is 11 pp. |
+| Explanation stability | XGBoost's top-5 explanation features stayed identical in 74% of ±1% perturbations, against 95% for Logistic Regression. |
+| Monotonicity | For every tested profile, XGBoost's curves in blood pressure, age and weight are non-monotone. |
+| Model disagreement | Across the three candidates, the median spread is 5 pp and the 95th percentile 17 pp. |
+| Synthetic shift | Ranking drops to about 0.75 ROC-AUC in older or higher-blood-pressure resampled populations; a +10 mmHg recording offset inflates the mean estimate by 14 pp. A controlled experiment, not external validation. |
 
 ## Dataset
 
-[Cardiovascular Disease dataset](https://www.kaggle.com/datasets/sulianova/cardiovascular-disease-dataset), S. Ulianova, Kaggle. The raw file is semicolon-separated with 70,000 rows and 13 columns. `src/data_loader.py` downloads it from Kaggle's public API (no account needed) and checks a SHA-256 hash. The data is not committed to this repository.
+[Cardiovascular Disease dataset](https://www.kaggle.com/datasets/sulianova/cardiovascular-disease-dataset) by S. Ulianova (Kaggle): 70,000 records, 13 columns, semicolon-separated. It is downloaded from Kaggle's public API (no account) and pinned by SHA-256; it is not redistributed here.
 
-**Why this dataset:**
-- It has 70,000 records, enough for credible cross-validation, calibration, bootstrap and subgroup analysis.
-- Its 11 inputs are ones a non-specialist can supply.
+- **Why this dataset:** enough records for credible repeated CV, calibration, bootstrap and subgroup analysis, and 11 inputs that a non-specialist can supply.
+- **Cleaning:** documented rules remove 1,427 rows (24 duplicates and implausible measurements, such as a blood pressure of 16,020), leaving **68,573** records (34,646 absent, 33,927 present). Every rule is shown in the app's Data Quality Lab.
+- **Features:** age (converted from days to years), gender, height and weight (combined into BMI, the only engineered feature), systolic and diastolic blood pressure, cholesterol and glucose (three levels), smoking, alcohol and physical activity (self-reported). `id` is never used.
+- **Target:** `cardio` (1 = cardiovascular disease present).
 
-**Cleaning:** documented data-quality rules remove 1,427 rows (24 duplicates and implausible measurements such as a blood pressure of 16,020), leaving **68,573** records (34,646 absent, 33,927 present). Details are in `docs/methodology.md` and in the app's Data Quality Lab.
+## Machine learning
 
-**Features:**
-
-| Field | Description |
-|---|---|
-| Age | in years; converted from days |
-| Gender | 1 = female, inferred from height |
-| Height, weight | combined into **BMI**, the only engineered feature |
-| Blood pressure | systolic and diastolic |
-| Cholesterol, glucose | normal / above normal / well above normal |
-| Smoking, alcohol, physical activity | self-reported |
-| `id` | never used |
-
-## Machine-learning methodology
-
-Full details are in [docs/methodology.md](docs/methodology.md), and every measured number is in [docs/evaluation.md](docs/evaluation.md). [docs/RESEARCH_VALIDATION.md](docs/RESEARCH_VALIDATION.md) traces each claim to the artifact that produces it, and records the Phase 9 audit.
-
-- **Strategy:** a stratified 80/20 split (54,858 train / 13,715 test). All comparisons use **5-fold CV repeated 5 times** (25 splits) on the training split. Preprocessing and calibration are fitted inside each split, and each metric is reported as mean, std, min and max. Every training row receives out-of-fold predictions, with fold and repeat recorded.
-- **Models:** Logistic Regression, Random Forest and XGBoost, each tested **raw, sigmoid-calibrated and isotonic-calibrated**, which makes 9 variants.
+- **Split:** stratified 80/20 with seed 42 (54,858 train / 13,715 test). The test set was used only after selection.
+- **Comparison:** 5-fold CV repeated 5 times (25 splits) on the training split. Preprocessing and calibration are fitted inside each split, and every training row gets out-of-fold predictions.
 - **Metrics:** accuracy, precision, recall, F1, ROC-AUC, PR-AUC, log loss, Brier score, ECE, and calibration slope and intercept.
 - **Selection protocol** (declared before the repeated-CV run; no tunable margins):
-  - every comparison is a corrected resampled t-test on the same 25 splits at α = 0.05;
+  - every comparison is a corrected resampled t-test (Nadeau–Bengio) on the same 25 splits at α = 0.05;
   - keep raw probabilities unless a calibrator lowers CV Brier significantly;
   - a model needs an exact SHAP explanation to be eligible;
-  - starting from the most interpretable model, move on only for a significant gain in **both** ROC-AUC and Brier.
+  - starting from the most interpretable model (LR → RF → XGBoost), move on only for a significant gain in **both** ROC-AUC and Brier.
+- **Selected: XGBoost, raw probabilities.** Its raw probabilities already agree closely with observed frequencies (out-of-fold ECE 0.004, slope 0.99), so no calibrator was adopted.
 
-  The previous version's margins (0.02 ROC-AUC, 0.001 Brier) were set after seeing results and are no longer used.
-- **Selected model: XGBoost, raw probabilities.** The test set was used only after selection.
+Full procedures: [docs/methodology.md](docs/methodology.md).
+
+## Results
+
+Held-out test set (13,715 records), evaluated once after selection; 95% bootstrap intervals in brackets.
 
 | Model (selected variant) | CV ROC-AUC (25 splits) | Test ROC-AUC [95% CI] | Test PR-AUC | Test Brier [95% CI] | Test F1 at 0.50 |
 |---|---|---|---|---|---|
 | Logistic Regression (isotonic) | 0.791 ± 0.004 | 0.793 [0.786, 0.801] | 0.770 | 0.184 [0.181, 0.188] | 0.725 |
 | Random Forest (isotonic) | 0.799 ± 0.004 | 0.802 [0.795, 0.810] | 0.776 | 0.180 [0.177, 0.184] | 0.725 |
-| **XGBoost (raw)** | **0.801 ± 0.004** | **0.804 [0.797, 0.812]** | **0.785** | **0.180 [0.176, 0.183]** | 0.722 |
+| **XGBoost (raw) — selected** | **0.801 ± 0.004** | **0.804 [0.797, 0.812]** | **0.785** | **0.180 [0.176, 0.183]** | 0.722 |
 
-**Honest reading.** XGBoost's advantage is small (about +0.011 ROC-AUC over Logistic Regression) but consistent across splits. The reliability analyses then expose its costs, which are reported, not hidden:
-- **Step-wise responses:** a 1% input change can move its estimate by up to 37 percentage points (pp); the 95th percentile is 11 pp.
-- **Non-monotone curves:** for every tested profile, its curves in blood pressure, age and weight are non-monotone.
-- **Less stable explanations:** the top-5 explanation features stayed identical in 74% of ±1% perturbations, against 95% for Logistic Regression.
+**How to read these numbers:**
+- XGBoost's advantage is small (about +0.011 ROC-AUC over Logistic Regression) but consistent across splits. Its costs are measured in [Reliability & robustness](#reliability--robustness).
+- **Thresholds:** at 0.30, 0.50 and 0.70, recall/specificity is 0.89/0.48, 0.69/0.78 and 0.52/0.89. No threshold is called optimal.
+- **Subgroups:** the gender groups are similar (ROC-AUC 0.803 / 0.806), but ranking falls with age, from 0.830 at 40–49 to **0.699 [0.678, 0.722] at 60–65**.
+- These results are **specific to one public dataset** and measure agreement with its labels. The dataset is not an external clinical cohort, and **none of this is clinical validation**.
 
-**Calibration.** XGBoost's raw probabilities already agree closely with observed outcome frequencies in this dataset (out-of-fold ECE 0.004, slope 0.99), so no calibrator was adopted. Raw Logistic Regression has an S-shaped miscalibration (slope ≈ 1, yet ECE 0.034) that isotonic calibration corrects and sigmoid calibration cannot.
+Every number is in [docs/evaluation.md](docs/evaluation.md) and traced to its artifact in [docs/RESEARCH_VALIDATION.md](docs/RESEARCH_VALIDATION.md).
 
-**Thresholds.** At 0.30, 0.50 and 0.70, recall/specificity on the test set is 0.89/0.48, 0.69/0.78 and 0.52/0.89. Threshold choice trades false positives against false negatives; the net-benefit curve is exploratory, and no threshold is called optimal. *Model probability*, *display band* (<30%, 30–60%, ≥60%) and *classification threshold* are three separate concepts.
+## Application walkthrough
 
-**Subgroup Performance Analysis:**
-- The gender groups are similar (ROC-AUC 0.803 / 0.806).
-- ROC-AUC falls with age: 0.830 at 40–49 but **0.699 [0.678, 0.722] at 60–65**.
-- Mean predicted tracks prevalence in every group.
+Real screenshots of the running app, using the synthetic example inputs (not real patients).
 
-No fairness claim is made. Only gender and age bands could be examined, because the dataset records no other demographic variables.
+<table>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/assets/screenshots/01-assess-landing.png"><img src="docs/assets/screenshots/01-assess-landing.png" alt="Assess page before an assessment"></a><br><sub><b>Assess.</b> Disclaimer, headline research facts read from the artifacts, the grouped input form, synthetic examples, and how the flow works.</sub></td>
+    <td width="50%" valign="top"><a href="docs/assets/screenshots/02-assess-result.png"><img src="docs/assets/screenshots/02-assess-result.png" alt="Assessment result for synthetic Example C"></a><br><sub><b>Result.</b> Model-estimated probability, prototype band, input conformity, reference baseline and the inputs that moved the estimate most.</sub></td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/assets/screenshots/03-explain-shap.png"><img src="docs/assets/screenshots/03-explain-shap.png" alt="Explain page with SHAP contributions"></a><br><sub><b>Explain.</b> Baseline → estimate, a plain-language summary and the exact SHAP contribution of every input.</sub></td>
+    <td width="50%" valign="top"><a href="docs/assets/screenshots/04-explore-what-if.png"><img src="docs/assets/screenshots/04-explore-what-if.png" alt="Explore page with a what-if scenario"></a><br><sub><b>Explore.</b> A what-if scenario, each change on its own, and the model estimate across one input, which shows XGBoost's steps.</sub></td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="docs/assets/screenshots/05-model-analytics.png"><img src="docs/assets/screenshots/05-model-analytics.png" alt="Model analytics overview"></a><br><sub><b>Model.</b> Candidate comparison across the 25 CV splits, then tabs for calibration, ROC &amp; PR, thresholds, explainability, subgroups, uncertainty and robustness.</sub></td>
+    <td width="50%" valign="top"><a href="docs/assets/screenshots/07-methodology.png"><img src="docs/assets/screenshots/07-methodology.png" alt="Methodology page"></a><br><sub><b>Methodology.</b> The ten-stage pipeline, then the Data Quality Lab, model card, validation strategy, limitations and scope.</sub></td>
+  </tr>
+</table>
 
-**Reliability and robustness:**
-- **Input conformity:** a Mahalanobis distance, fitted and chosen on training data only, flags about 1% of inputs as unusual.
-- **Model disagreement:** across the three candidates, the median spread is 5 pp and the 95th percentile 17 pp.
-- **Synthetic shifts:** ranking drops to about 0.75 ROC-AUC in older or higher-blood-pressure populations, and a +10 mmHg recording offset inflates the mean estimate by 14 pp.
+## Installation
 
-**Explainability:** exact TreeSHAP on XGBoost's log-odds score reconciles with the model output within 1e-5. Systolic BP has 49% of the attribution, age 16% and cholesterol 13%. SHAP and the other analyses describe the model, never medical causation. In this dataset, smoking and alcohol show slightly *lower* label rates (a confounded pattern), and the model reproduces it.
-
-## Architecture
-
-```
-src/data_loader.py      download + checksum, cleaning rules (with exclusions), train/test split
-src/preprocessing.py    schema, plausibility ranges, labels, BMI, preprocessing pipeline
-src/evaluate_models.py  evaluation layer: metrics, repeated OOF CV, corrected t-test, calibration stats,
-                        thresholds, decision curve, bootstrap, subgroups
-src/train_models.py     9-variant repeated-CV comparison, selection protocol, persistence -> metrics.json, models/
-src/analysis.py         test-set analyses + data-quality report -> artifacts/analysis.json
-src/reliability.py      calibration deep dive, OOF thresholds, novelty detector, stability, monotonicity,
-                        disagreement -> artifacts/reliability.json; per-assessment reliability checks
-src/shift_analysis.py   synthetic distribution-shift experiment -> artifacts/shift_analysis.json
-src/prediction.py       input contract (PatientInput), artifact checks, prediction, demo inputs
-src/explainability.py   exact SHAP (linear or TreeSHAP) on the model score, probability mapping, global importance
-src/what_if.py          guarded what-if scenarios and response curves
-src/recommendations.py  rule-based informational guidance, prototype bands, disclaimer
-app.py                  Streamlit entry point (top navigation)
-ui/core.py              design tokens, cached resources, shared components
-ui/{assess,explain,explore,model,methodology}.py   the five pages
-docs/                   RESEARCH_VALIDATION.md, methodology.md, evaluation.md, model_card.md
-scripts/setup.sh        fresh-clone setup and full regeneration
-tests/                  161 tests (data, models, evaluation, selection, reliability, prediction, SHAP, what-if, guidance, UI)
-```
-
-The rule-based guidance engine (`src/recommendations.py`) uses fixed, transparent rules on the user's inputs and the probability band, with no LLM. It never states a condition or names a treatment. A lower estimate is described as "does not rule out any health condition".
-
-## Setup
-
-Tested on macOS (Apple Silicon) with **Python 3.12**. From a fresh clone:
+**Requirements:** Python **3.12**, macOS on Apple Silicon (verified; Linux should work, Windows is untested), and on macOS `brew install libomp` for XGBoost.
 
 ```bash
+git clone https://github.com/soyebmohammad03-dev/AI-Powered-Healthcare-Risk-Assessment-Assistant.git
+cd AI-Powered-Healthcare-Risk-Assessment-Assistant
 ./scripts/setup.sh
 ```
 
-The script is safe to rerun and only creates what is missing:
-1. checks for Python 3.12 (`PYTHON=/path/to/python3.12 ./scripts/setup.sh` to choose one);
-2. creates `.venv` and installs the pinned dependencies (`requirements.txt` for runtime, `requirements-dev.txt` adds pytest);
-3. checks that XGBoost can load OpenMP (on macOS: `brew install libomp`, the one system dependency);
-4. downloads and validates the dataset;
-5. trains the models if `models/` is missing them or they were saved by other library versions, then builds the novelty detector;
-6. loads the saved model and scores the three synthetic demo inputs.
+`setup.sh` creates `.venv`, installs the pinned dependencies, checks that XGBoost can load OpenMP, downloads and validates the dataset, trains any missing models and scores the three demo inputs. The first run takes about 10 minutes, mostly model training. It is safe to rerun. To choose an interpreter, use `PYTHON=/path/to/python3.12 ./scripts/setup.sh`.
 
-The first run takes about 10 minutes on an Apple Silicon laptop (measured: 9 min 16 s for a full `--regenerate` including the dependency install), mostly the 9-variant repeated-CV comparison.
+## Dataset setup
+
+Automatic: `setup.sh` (or the first pipeline command) downloads the dataset and checks its SHA-256 and the cleaned row count of 68,573. No account or credentials are needed.
+
+If the download fails, download `cardio_train.csv` manually from the [Kaggle page](https://www.kaggle.com/datasets/sulianova/cardiovascular-disease-dataset) and place it at `data/cardio_train.csv`; the checksum is still verified. The schema and checksum are in [docs/reproducibility.md](docs/reproducibility.md#dataset).
+
+## Run the application
+
+```bash
+.venv/bin/streamlit run app.py
+```
+
+Open the URL Streamlit prints (by default http://localhost:8501), select **Example A**, **B** or **C**, then **Run Assessment**.
+
+## Run tests
+
+```bash
+.venv/bin/python -m pytest -q
+```
+
+162 tests, about 35 seconds once the models exist. They cover metric invariants, repeated CV and out-of-fold leakage, test-set integrity (nothing is chosen on the test set), the selection protocol, calibration and bootstrap reproducibility, reliability statistics, SHAP reconciliation for every candidate, what-if guardrails, guidance language, every UI page through Streamlit's `AppTest`, and portability (no machine-specific paths, pinned requirements, provenance, stale models rejected). The same suite runs in CI on every push.
+
+## Reproduce results
+
+```bash
+./scripts/setup.sh --regenerate
+```
+
+This retrains every model and rebuilds all four committed artifacts in pipeline order. Seed 42 is used throughout, the dataset is checksum-pinned and the dependencies are pinned. Selection decisions are identical on regeneration; the tree models reproduce to floating-point precision. Each artifact records its provenance (generation time, versions, dataset SHA-256, seed). See [docs/reproducibility.md](docs/reproducibility.md).
 
 | Task | Command |
 |---|---|
-| Set up | `./scripts/setup.sh` |
-| Run the tests | `.venv/bin/python -m pytest -q` |
-| Run the app | `.venv/bin/streamlit run app.py` |
 | Retrain the models only | `.venv/bin/python -m src.train_models` |
-| Regenerate every model and artifact | `./scripts/setup.sh --regenerate` |
+| Rebuild one analysis | `.venv/bin/python -m src.analysis` (or `src.reliability`, `src.shift_analysis`) |
 | Check the saved model | `.venv/bin/python -m src.prediction` |
 
-Other command-line checks: `python -m src.explainability` and `python -m src.recommendations`.
+## Repository structure
 
-### Dataset setup
-
-The dataset is not committed. `src/data_loader.py` downloads it from Kaggle's public API on first use, with **no account or credentials**: `https://www.kaggle.com/api/v1/datasets/download/sulianova/cardiovascular-disease-dataset`. It then validates the file:
-- **Checksum:** `cardio_train.csv` must have SHA-256 `21a705d23381b0dfd6a6416da701b490744f1fc3b47e9ff3db3968c420ffa10c`, which pins all 70,000 rows exactly.
-- **Format:** semicolon-separated, columns `id;age;gender;height;weight;ap_hi;ap_lo;cholesterol;gluc;smoke;alco;active;cardio` in that order.
-- **Cleaning:** the cleaned row count must be 68,573, checked by `setup.sh`.
-
-**If the download fails** (offline, or Kaggle changes its API), download the dataset manually from the [Kaggle page](https://www.kaggle.com/datasets/sulianova/cardiovascular-disease-dataset), unzip it, and place `cardio_train.csv` at `data/cardio_train.csv`. The checksum is still verified.
-
-**Raw schema:**
-- `age` is in days and is converted to years.
-- `gender`: 1 = female, 2 = male.
-- `height` is in cm and `weight` in kg.
-- `ap_hi` and `ap_lo` are systolic and diastolic blood pressure, in mm Hg.
-- `cholesterol` and `gluc`: 1 = normal, 2 = above normal, 3 = well above normal.
-- `smoke`, `alco` and `active` are 0/1.
-- **Target** `cardio`: 1 = cardiovascular disease present, 0 = absent.
-
-**Split:** stratified 80/20 with seed 42, giving 54,858 train and 13,715 test rows.
-
-### Reproducibility
-
-- **Seeds:** every random step uses seed 42: the split, the CV folds, the models, the bootstraps and the perturbations.
-- **Repeatability:** regenerating gives identical selection decisions. Logistic Regression reproduces exactly; the tree models reproduce to floating-point precision (multithreaded training).
-- **Committed outputs:** `artifacts/metrics.json`, `analysis.json`, `reliability.json` and `shift_analysis.json` are committed, so the Model and Methodology pages can be read without retraining.
-- **Provenance:** each committed artifact carries a `provenance` block with the generation time, the Python and library versions, the dataset SHA-256 and the seed.
-- **Not committed:** model files (`models/*.joblib`), `artifacts/oof_predictions.npz` and the dataset. They are rebuilt by `setup.sh`.
-- **Loader checks:** the model loader refuses a model file that was built with different scikit-learn/XGBoost versions, or whose feature contract does not match the code. It tells you the command that regenerates it.
-- **Dependencies:** all are pinned in `requirements.txt`. Pickled scikit-learn/XGBoost models are only reliable on the versions that wrote them, so pins should be changed together with a full regeneration.
-
-## Tests
-
-```bash
-python -m pytest -q
+```
+app.py                      Streamlit entry point (top navigation)
+ui/                         the five pages + shared components (no model logic)
+src/                        data, preprocessing, evaluation, training, analysis, reliability,
+                            prediction, SHAP, what-if and rule-based guidance
+artifacts/*.json            generated, committed analysis outputs (with provenance)
+models/, data/              generated / downloaded locally, not committed
+tests/                      pytest suite (162 tests)
+scripts/setup.sh            fresh-clone setup and full regeneration
+docs/                       documentation index, architecture, reproducibility, methodology,
+                            evaluation, research validation, model card; assets/ for images
+.github/workflows/tests.yml CI: setup + full test suite on macOS (Apple Silicon)
 ```
 
-The suite contains 161 tests. It covers:
-- metric definitions and invariants (threshold metrics are consistent, recall never rises with the threshold, net-benefit formula);
-- repeated CV (fixed seed, 25 disjoint splits, each row validated once per repeat) and out-of-fold leakage (a memorising model on random labels scores at chance);
-- test-set integrity: the final pipeline and calibrators are reproduced from training rows alone, the selection ignores scrambled test numbers, no threshold is tuned, and the novelty detector is fitted and chosen on training rows only;
-- the selection protocol reproducing the recorded decision and behaving correctly on synthetic inputs;
-- calibration statistics, reproducible calibration artifacts, bootstrap reproducibility and interval ordering, and subgroup "metric unavailable" handling;
-- input conformity (unusual inputs are flagged without blocking), deterministic perturbation and explanation-stability statistics, candidate-model disagreement, and a reproducible synthetic shift kept separate from validation;
-- SHAP reconciling with the model score and probability for every candidate model, within 1e-5;
-- what-if guardrails, the baseline being reproduced, and response curves staying in the valid domain;
-- guidance language;
-- every UI page driven through Streamlit's `AppTest`, including the landing evidence read from the artifacts and starting an assessment from a synthetic example on Explain or Explore;
-- portability: no machine-specific paths in tracked files, pinned requirements, provenance in committed artifacts, and stale model files rejected.
+## Limitations
 
-## Intended use and limitations
+> [!WARNING]
+> Read these before drawing any conclusion from the model.
 
-See the [model card](docs/model_card.md).
+- **Single public dataset, no external validation.** Every result describes one Kaggle dataset of limited provenance. Nothing has been validated on a clinical population.
+- **Observational data, not causality.** The model reproduces confounded patterns (smoking and alcohol show *lower* label rates here; glucose "well above normal" also behaves unexpectedly). SHAP describes model behaviour, never medical cause and effect.
+- **Subgroup differences.** Ranking is clearly weaker for ages 60–65 (ROC-AUC 0.699). Only gender and age bands could be examined; the dataset records no other demographics, so no fairness claim is made.
+- **Non-monotone, step-wise behaviour.** XGBoost's estimate can fall when blood pressure, age or weight rises, and responds in steps at its split points.
+- **Sensitivity to small input changes.** A 1% change can move the estimate by many percentage points, and explanations are less stable than Logistic Regression's.
+- **Limited feature set.** 11 inputs; lifestyle inputs are self-reported and laboratory values are coarse three-level categories. No history, medication, symptoms or examination findings.
+- **Coverage.** Training data covers ages 29–65 only; other ages are rejected.
+- **Prototype bands and thresholds** are presentation choices, not clinical cut-offs.
+- **Not a clinical system.** Not for diagnosis, screening, triage, treatment or any clinical decision.
 
-- **Intended for:** teaching, demonstration and critical inspection of explainable, human-centred AI on tabular health data.
-- **Not intended for:** diagnosis, screening, triage, treatment or any clinical decision, or for people outside the data's coverage (ages 29–65).
+The full list is in the [model card](docs/model_card.md).
 
-**Known limitations:**
-- The selected XGBoost model responds in steps, is non-monotone in its main inputs, and has less stable explanations than Logistic Regression.
-- The dataset has limited provenance.
-- Lifestyle inputs are self-reported, and the lab inputs are coarse three-level categories.
-- The model has learned confounded patterns (smoking, alcohol, glucose "well above normal").
-- Ranking performance is weaker for ages 60–65.
-- Correlated blood-pressure features share explanation credit.
-- Prototype bands and thresholds are not clinical cut-offs.
-- The saved models are tied to the pinned scikit-learn and XGBoost versions; the loader rejects a mismatch.
-- Setup is tested on macOS (Apple Silicon) with Python 3.12. Linux should work; Windows is untested.
+## Ethical / medical disclaimer
+
+This project is an educational AI decision-support prototype. It is **not a medical device**, a diagnostic system, or a substitute for professional medical advice. Its outputs are model-based estimates of agreement with one public research dataset's labels, are not clinically validated, and should not be interpreted as an individual clinical diagnosis or treatment guidance. If you have health concerns, please consult a qualified healthcare professional.
+
+The guidance shown in the app comes from fixed, transparent rules, with no LLM. It never states a condition or names a treatment, and a lower estimate is described as not ruling out any health condition.
 
 ## Future work
 
 - External validation on a dataset with documented clinical provenance.
-- A monotone-constrained XGBoost model, evaluated under the same protocol, to address the step-wise and non-monotone responses.
-- Continuous integration that runs the test suite on every push.
+- A monotone-constrained XGBoost model, evaluated under the same pre-declared protocol, to address the step-wise and non-monotone responses.
 
 ## License
 
 [MIT](LICENSE) © 2026 Soyeb Mohammad. The dataset is not covered by this license; it is subject to its own terms on Kaggle.
+
+`v1.0.0` is the frozen research release. Later commits on `main` polish the user interface, documentation and repository presentation; the model, the dataset, the evaluation methodology and every reported result are unchanged.

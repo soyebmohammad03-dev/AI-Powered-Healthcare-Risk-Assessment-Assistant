@@ -20,7 +20,7 @@ It estimates the probability of the dataset label `cardio` from 11 self-reportab
 ```bash
 ./scripts/setup.sh                 # fresh clone -> venv, deps, dataset, missing models (~10 min first time)
 ./scripts/setup.sh --regenerate    # retrain + rebuild all artifacts
-.venv/bin/python -m pytest -q      # full suite (161 tests, ~35 s once models exist)
+.venv/bin/python -m pytest -q      # full suite (162 tests, ~35 s once models exist)
 .venv/bin/streamlit run app.py     # the app
 ```
 
@@ -62,7 +62,8 @@ The pipeline order is `src.train_models` → `src.analysis` → `src.reliability
 - **`app.py` and `ui/`** are the Streamlit app. `app.py` handles navigation and `ui/core.py` holds shared components and cached resources. The five pages are Assess, Explain, Explore, Model and Methodology.
 - **`artifacts/*.json`** files are generated and committed; each has a `provenance` block. `oof_predictions.npz` is generated and ignored.
 - **`models/*.joblib`** files are generated and ignored. `data/` is downloaded and ignored.
-- **`docs/`** holds `RESEARCH_VALIDATION.md` (evidence chain, claim → artifact traceability, Phase 9 audit), `methodology.md` (how), `evaluation.md` (every measured number) and `model_card.md` (intended use and limitations). Update them whenever methodology or numbers change.
+- **`docs/`** holds `README.md` (index), `architecture.md`, `reproducibility.md`, `RESEARCH_VALIDATION.md` (evidence chain, claim → artifact traceability, Phase 9 audit), `methodology.md` (how), `evaluation.md` (every measured number) and `model_card.md` (intended use and limitations). Update them whenever methodology or numbers change. `docs/assets/` holds the banner, the architecture diagram (an SVG) and screenshots of the real app taken with the synthetic examples; retake screenshots when the UI changes.
+- **`.github/workflows/tests.yml`** runs `scripts/setup.sh` and the full suite on macOS (Apple Silicon) for every push and pull request, caching the dataset and models.
 - **`tests/`** contains the pytest suite. Fixtures train the models if they are missing.
 
 ## Known limitations
@@ -75,4 +76,5 @@ The pipeline order is `src.train_models` → `src.analysis` → `src.reliability
 ## Status and roadmap
 
 - Phases 1–9 are complete (Phase 8: product UX polish, MIT license; Phase 9: scientific validation and evidence audit, which moved the novelty-detector choice off the test set). They covered data, models, SHAP, guidance, UI, rigorous evaluation and reliability, then reproducibility and public release.
-- Candidate future phases include external validation, a monotone-constrained XGBoost evaluated under the same protocol, and CI. **Do not start a phase unless asked.**
+- `v1.0.0` (on `dc03018`) is the frozen release; later commits on `main` are UI polish, documentation and CI only.
+- Candidate future phases include external validation and a monotone-constrained XGBoost evaluated under the same protocol. **Do not start a phase unless asked.**
